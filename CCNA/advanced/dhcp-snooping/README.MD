@@ -269,3 +269,9 @@ This lab demonstrates a complete lifecycle:
 It highlights the importance of Layer 2 security mechanisms in enterprise networks.
 
 ---
+
+## Related Labs
+
+This lab builds upon fundamental dynamic address assignment concepts. For a detailed breakdown of the initial DORA sequence and baseline server configuration:
+
+* Review the foundational lab: [DHCP Basic Lab](../../basic/dhcp)
