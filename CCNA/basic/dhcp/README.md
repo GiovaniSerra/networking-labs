@@ -13,7 +13,7 @@ Single broadcast domain environment.
 - Layer 2 Switch (SW1)
 - Client (PC1)
 
-![image alt](https://github.com/GiovaniSerra/Networking-labs/blob/main/CCNA/Basic/DHCP/topology.png)
+![Topology](https://github.com/GiovaniSerra/Networking-labs/blob/main/CCNA/Basic/DHCP/topology.png)
 
 ## Lab Environment
 - Router: 7206VXR (Dynamips)
@@ -83,13 +83,13 @@ show ip dhcp binding
 - IP address assigned to the client
 - MAC address associated with the lease
 
-![image alt](https://github.com/GiovaniSerra/Networking-labs/blob/main/CCNA/Basic/DHCP/ip%20dhcp%20binding.png)
+![IP BINDING](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/ip%20dhcp%20binding.png)
 
 ### Client IP Address (PC1)
 
 Verify that the client received a valid IP address from the 192.168.1.0/24 network.
 
-![image alt](https://github.com/GiovaniSerra/Networking-labs/blob/main/CCNA/Basic/DHCP/dhcp.png)
+![Show IP Int Brief](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/dhcp.png)
 
 The assigned IP address falls within the configured DHCP pool range (192.168.1.101–192.168.1.253), confirming that the excluded-address configuration is working as expected
 
@@ -101,7 +101,7 @@ ping 192.168.1.254
 
 Successful replies
 
-![image alt](https://github.com/GiovaniSerra/Networking-labs/blob/main/CCNA/Basic/DHCP/ping.png)
+![Successful Ping](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/ping.png)
 
 ## DHCP Process (Packet Capture)
 
@@ -121,7 +121,7 @@ Acknowledge
 
 Packets 154–159 show the full DORA process using Transaction ID 0x16a8.
 
-![image alt](https://github.com/GiovaniSerra/Networking-labs/blob/main/CCNA/Basic/DHCP/dhcp-dora-wireshark.png)
+![DORA Wireshark](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/dhcp-dora-wireshark.png)
 
 All packets share the same Transaction ID, confirming they belong to the same DHCP exchange.
 
@@ -142,7 +142,7 @@ The DHCP server confirms the lease and finalizes the IP assignment
 
 All packets share the same Transaction ID, ensuring consistency in the DHCP exchange. The process uses UDP ports 67 (server) and 68 (client), as defined for DHCP communication.
 
-![image alt](https://github.com/GiovaniSerra/Networking-labs/blob/main/CCNA/Basic/DHCP/dora-sequence.png)
+![DORA Sequence](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/dora-sequence.png)
 
 ## Troubleshooting
 
