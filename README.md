@@ -2,9 +2,9 @@
 
 A collection of hands-on networking labs focused on Cisco technologies, network protocols, cloud connectivity, and enterprise infrastructure.
 
-This repository documents my practical studies through real laboratory environments built with Cisco IOS, EVE-NG, and Wireshark. Each lab combines theoretical concepts with configuration, packet analysis, validation, and troubleshooting.
+This repository documents my practical studies using virtual laboratory environments built with Cisco, Fortinet, Linux, EVE-NG, and Wireshark. Each lab combines theoretical concepts with configuration, traffic analysis, security policy implementation, and troubleshooting.
 
-The goal is to build a structured portfolio covering networking fundamentals through advanced enterprise technologies while following industry best practices.
+The goal is to build a structured portfolio covering networking fundamentals, next-generation firewalls, system administration, and security concepts while following industry best practices.
 
 ---
 
@@ -29,63 +29,24 @@ All labs are performed using a virtual enterprise environment.
 
 | Component | Description |
 |----------|-------------|
-| Cisco IOSv | Router operating system |
-| Cisco IOSvL2 | Layer 2 switching platform |
-| EVE-NG | Network emulation platform |
-| Wireshark | Packet capture and protocol analysis |
-| Windows 11 | Host operating system |
-| Windows 10 | Host operating system |
-| VPC | Host operating system |
-| Linux Ubuntu | Host operating system |
-| Windows Server | Host operating system |
-
----
-
-## Documentation Standard
-
-Every lab follows the same documentation structure:
-
-- Overview
-- Core Concepts
-- Network Topology
-- Configuration
-- Verification
-- Packet Analysis
-- Troubleshooting
-- Key Takeaways
-- RFCs / References
-
-The objective is not only to configure network devices, but also to understand protocol behavior, analyze packets, validate functionality, and document operational procedures.
-
----
-
-## Learning Path
-
-### CCNA
-
-- Network Fundamentals
-- IPv4
-- IPv6
-- ICMP / ICMPv6
-- ARP
-- VLANs
-- STP
-- EtherChannel
-- Static Routing
-- OSPF
-- ACLs
-- NAT
-- DHCP
-- DNS
-- Wireless
-- Network Security Fundamentals
-
-### CCNP
-
-Enterprise-level technologies including advanced routing, switching, redundancy, automation, and network services.
+| **EVE-NG / PNETLab** | Network emulation platform |
+| **Cisco CSR1000v** | Enterprise cloud router (IOS-XE) |
+| **Cisco VIOS L2** | Layer 2 switching platform |
+| **Cisco vWLC** | Virtual Wireless LAN Controller |
+| **Cisco ISE** | Identity Services Engine (NAC/AAA) |
+| **Fortinet FortiGate** | Next-Generation Firewall (NGFW) |
+| **Fortinet FortiManager** | Centralized security management platform |
+| **Fortinet FortiAnalyzer** | Centralized logging and analytics platform |
+| **Kali Linux** | Security auditing and penetration testing platform |
+| **Metasploitable** | Vulnerable Linux target for security testing |
+| **Ubuntu / Debian Linux** | Linux server environments |
+| **Windows Server 2019** | Active Directory and core network services |
+| **Windows 10** | Enterprise client end-host |
+| **Windows 11** | Enterprise client end-host |
+| **Wireshark** | Packet capture and protocol analysis |
 
 ---
 
 ## Purpose
 
-This repository serves as my networking portfolio and study journal while preparing for Cisco certifications and developing practical skills in enterprise networking and cloud infrastructure.
+This repository serves as my networking portfolio and study journal while preparing for Cisco certifications and developing practical skills in enterprise networking infrastructure.
