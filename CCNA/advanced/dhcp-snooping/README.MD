@@ -31,7 +31,7 @@ R1 → SW1 → SW2
 Clients distributed across both switches
 Attacker connected to SW2
 
-![Topology](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/topology.png)
+![Topology](./topology.png)
 
 ---
 
@@ -113,9 +113,9 @@ Expected result:
 * All clients receive IP addresses from R1
 * Default gateway: 192.168.10.1
 
-![DORA PC2 Space](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/dora%20-%20pc2%20.png)
+![DORA PC2 Space](./dora%20-%20pc2%20.png)
 
-![DORA PC2](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/dora%20-%20pc2.png)
+![DORA PC2](./dora%20-%20pc2.png)
 ---
 
 ## Phase 2 - Rogue DHCP Attack
@@ -127,9 +127,9 @@ ip 0.0.0.0
 ip dhcp
 ```
 
-![PC2 Two IPs](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/pc2%20-%20com%20os%202%20ips.png)
+![PC2 Two IPs](./pc2%20-%20com%20os%202%20ips.png)
 
-![Binding Attacker](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/binding%20-%20attacker.png)
+![Binding Attacker](./binding%20-%20attacker.png)
 
 Observed behavior:
 
@@ -146,16 +146,16 @@ This demonstrates the vulnerability of DHCP in an unprotected Layer 2 network.
 Wireshark captures show the DHCP DORA process:
 
 * Discover (broadcast from client)
-![PC4 DHCP Attacker](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/pc4%20-%20dhcp%20attacker.png)
+![PC4 DHCP Attacker](./pc4%20-%20dhcp%20attacker.png)
 
 * Offer (multiple responses from R1 and attacker)
-![PC4 DHCP Attacker Offer](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/pc4%20-%20dhcp%20attacker%20offer.png)
+![PC4 DHCP Attacker Offer](./pc4%20-%20dhcp%20attacker%20offer.png)
 
 * Request (client selects one offer)
-![PC4 DHCP Attacker Request](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/pc4%20-%20dhcp%20att%20request.png)
+![PC4 DHCP Attacker Request](./pc4%20-%20dhcp%20att%20request.png)
 
 * Acknowledgment
-![PC4 Attacker Ack](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/pc4%20-%20att%20ack.png)
+![PC4 Attacker Ack](./pc4%20-%20att%20ack.png)
 
 During the attack phase, multiple DHCP Offer packets are visible, indicating competing DHCP servers.
 
@@ -201,7 +201,7 @@ Clients renew DHCP again:
 ```
 ip dhcp
 ```
-![PC4 IP R1](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/pc4%20-%20ip%20r1.png)
+![PC4 IP R1](./pc4%20-%20ip%20r1.png)
 
 Expected result:
 
@@ -219,14 +219,14 @@ On switches:
 show ip dhcp snooping
 show ip dhcp snooping binding
 ```
-![SW2 Snooping Binding](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/sw2%20snooping%20bind.png)
+![SW2 Snooping Binding](./sw2%20snooping%20bind.png)
 
 On R1 & ATTACKER:
 
 ```
 show ip dhcp binding
 ```
-![Binding R1 and Attacker](https://raw.githubusercontent.com/GiovaniSerra/Networking-labs/main/CCNA/advanced/dhcp-snooping/binding%20-%20r1%20e%20attacker.png)
+![Binding R1 and Attacker](./binding%20-%20r1%20e%20attacker.png)
 ---
 
 ## Important Consideration - DHCP Option 82
