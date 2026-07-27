@@ -154,3 +154,11 @@ Packets 154–159 show the complete DORA process using a single Transaction ID (
 * Verify that the DHCP pool network subnet matches the router interface IP subnet.
 * Confirm that the client interface is explicitly set to acquire an address dynamically (`ip address dhcp`).
 * Check if the `ip dhcp excluded-address` range is not accidentally blocking the entire active pool scope.
+
+---
+
+## Next Steps & Related Labs
+
+After mastering basic DHCP operation and analyzing the DORA process, the next step is securing dynamic address allocation against attacks like DHCP Spoofing and Rogue DHCP Servers.
+
+* Proceed to the advanced security lab: [DHCP Snooping Lab](../../advanced/dhcp-snooping)
