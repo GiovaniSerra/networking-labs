@@ -1,152 +1,156 @@
 # DHCP Basic Lab
+
 ## Overview
 
 This lab configures a DHCP server and validates dynamic IP assignment within a single broadcast domain without relay agents.
 
-The goal is to validate DHCP functionality and understand the dynamic IP assignment process.
+The goal is to validate DHCP functionality, verify configuration parameters, and analyze the dynamic IP assignment process (DORA).
+
+---
 
 ## Topology
 
-Single broadcast domain environment.
+Single broadcast domain environment consisting of:
+* **R1**: Cisco Router acting as DHCP Server
+* **SW1**: Layer 2 Switch
+* **PC1**: Client host
 
-- Router (R1) acting as DHCP Server
-- Layer 2 Switch (SW1)
-- Client (PC1)
+![Topology](./topology.png)
 
-![Topology](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/topology.png)
+---
 
 ## Lab Environment
-- Router: 7206VXR (Dynamips)
-- Switch: IOL L2 l2-adipservicesk9-m-15.2-20170202.bin
-- PC: IOL L2 (configured as DHCP client via switchport)
 
-## IP Addressing
-- Network: 192.168.1.0/24
-- Default Gateway: 192.168.1.254
-- DHCP Range: 192.168.1.101 – 192.168.1.253
-- DNS Server: 8.8.8.8
+| Component | Description / Model |
+|----------|-------------|
+| **Platform** | EVE-NG / PNETLab |
+| **Router (R1)** | Cisco 7206VXR (Dynamips) |
+| **Switch (SW1)** | Cisco IOL L2 (`l2-adipservicesk9-m-15.2-20170202.bin`) |
+| **Client (PC1)** | Cisco IOL L2 (configured as host via switchport) |
+| **Packet Analysis** | Wireshark Capture |
+
+---
+
+## IP Addressing Plan
+
+| Parameter | Value |
+|-----------|-------|
+| **Network Subnet** | 192.168.1.0/24 |
+| **Default Gateway** | 192.168.1.254 |
+| **Excluded IP Range** | 192.168.1.1 – 192.168.1.100 |
+| **DHCP Pool Range** | 192.168.1.101 – 192.168.1.253 |
+| **DNS Server** | 8.8.8.8 |
+| **Lease Time** | 7 days |
+
+---
 
 ## Configuration
 
 ### R1 (DHCP Server)
 
+```cisco
 enable
-
 configure terminal
-
 hostname R1
 
-interface fa0/0
-
+interface FastEthernet0/0
  ip address 192.168.1.254 255.255.255.0
- 
  no shutdown
+exit
 
 ip dhcp excluded-address 192.168.1.1 192.168.1.100
 
 ip dhcp pool DHCPLAB
-
  network 192.168.1.0 255.255.255.0
- 
  default-router 192.168.1.254
- 
  dns-server 8.8.8.8
- 
  lease 7
- 
 end
+```
 
 ### PC1 (DHCP Client)
 
+```cisco
 enable
-
 configure terminal
-
 hostname PC1
 
-interface e0/1
-
+interface Ethernet0/1
  no switchport
- 
  ip address dhcp
- 
+ no shutdown
 end
+```
+
+---
+
 
 ## Verification
 
-### DHCP Binding Table (R1)
+### 1. DHCP Binding Table (R1)
 
+Verify active IP assignments on the DHCP server:
+
+```cisco
 show ip dhcp binding
+```
 
-### Expected result:
+### Expected Result:
 
-- IP address assigned to the client
-- MAC address associated with the lease
+IP address assigned to the client (192.168.1.101).
+Hardware address (MAC) associated with the dynamic lease.
 
-![IP BINDING](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/ip%20dhcp%20binding.png)
+![IP BINDING](./ip%20dhcp%20binding.png)
 
-### Client IP Address (PC1)
+### Client IP Address Verification (PC1)
+Verify that the client received a valid IP address from the server:
 
-Verify that the client received a valid IP address from the 192.168.1.0/24 network.
+```cisco
+show ip interface brief
+```
 
-![Show IP Int Brief](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/dhcp.png)
+![Show IP Int Brief](./dhcp.png)
 
-The assigned IP address falls within the configured DHCP pool range (192.168.1.101–192.168.1.253), confirming that the excluded-address configuration is working as expected
+The assigned IP address (192.168.1.101) falls strictly within the configured DHCP pool range (192.168.1.101–192.168.1.253), confirming that the ip dhcp excluded-address range (192.168.1.1–192.168.1.100) is working as expected.
+
 
 ## Connectivity Test
+Validate connectivity from the client to the default gateway:
 
+```cisco
 ping 192.168.1.254
+```
 
-## Expected result:
+Expected Result: Successful ICMP replies (100% success rate).
 
-Successful replies
+![Successful Ping](./ping.png)
 
-![Successful Ping](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/ping.png)
+## DHCP Process & Packet Analysis (DORA)
 
-## DHCP Process (Packet Capture)
+### DORA Sequence Summary
 
-The DHCP process follows the DORA sequence:
+1. **Discover**: The client broadcasts a request looking for an available DHCP server (`0.0.0.0:68` → `255.255.255.255:67`).
+2. **Offer**: The router (R1) responds with an available IP address from the pool, including network parameters such as gateway and DNS.
+3. **Request**: The client broadcasts a request accepting the offered IP address, informing all DHCP servers of its selection.
+4. **Acknowledge (ACK)**: The DHCP server confirms the lease and finalizes the IP assignment.
 
-Discover
-- The client broadcasts a request looking for a DHCP server
+### Wireshark Traffic Capture
 
-Offer
-- The server responds with an available IP address
+Packets 154–159 show the complete DORA process using a single Transaction ID (`0x16a8`):
 
-Request
-- The client requests the offered IP
+![Wireshark DORA Capture](./dhcp-dora-wireshark.png)
 
-Acknowledge
-- The server confirms the assignment
+![DORA Sequence Detail](./dora-sequence.png)
 
-Packets 154–159 show the full DORA process using Transaction ID 0x16a8.
+* **Transaction ID**: All packets share the same Transaction ID (`0x16a8`), confirming they belong to the same exchange sequence.
+* **Ports**: The exchange utilizes standard UDP ports 67 (Server) and 68 (Client).
+* **Initial State**: The Discover packet uses `0.0.0.0` as the source IP, as the host does not yet hold a valid network configuration.
 
-![DORA Wireshark](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/dhcp-dora-wireshark.png)
+---
 
-All packets share the same Transaction ID, confirming they belong to the same DHCP exchange.
+## Troubleshooting Checklist
 
-The DHCP Discover is sent from 0.0.0.0 to 255.255.255.255 using UDP port 68 → 67, indicating the client does not yet have an IP address.
-
-## DHCP DORA Sequence
-
-The capture shows the complete DHCP exchange using a single Transaction ID, confirming all packets belong to the same process.
-
-### Discover
-The client sends a broadcast from 0.0.0.0 to 255.255.255.255 using UDP port 68 → 67, since it does not yet have an IP address
-### Offer
-R1 responds with an available IP address from the DHCP pool, including network parameters such as gateway and DNS
-### Request
-The client broadcasts a request to accept the offered IP address, informing all DHCP servers of its selection
-### Acknowledge (ACK)
-The DHCP server confirms the lease and finalizes the IP assignment
-
-All packets share the same Transaction ID, ensuring consistency in the DHCP exchange. The process uses UDP ports 67 (server) and 68 (client), as defined for DHCP communication.
-
-![DORA Sequence](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/dora-sequence.png)
-
-## Troubleshooting
-
-- Ensure interfaces are up (no shutdown)
-- Verify DHCP pool network matches the interface subnet
-- Check if the client is configured for DHCP
-- Confirm excluded-address range does not block the pool
+* Ensure interfaces are administratively up (`no shutdown`).
+* Verify that the DHCP pool network subnet matches the router interface IP subnet.
+* Confirm that the client interface is explicitly set to acquire an address dynamically (`ip address dhcp`).
+* Check if the `ip dhcp excluded-address` range is not accidentally blocking the entire active pool scope.
