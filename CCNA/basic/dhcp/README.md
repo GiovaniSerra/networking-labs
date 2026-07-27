@@ -13,7 +13,7 @@ Single broadcast domain environment.
 - Layer 2 Switch (SW1)
 - Client (PC1)
 
-![Topology](https://github.com/GiovaniSerra/Networking-labs/blob/main/CCNA/Basic/DHCP/topology.png)
+![Topology](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/dhcp/topology.png)
 
 ## Lab Environment
 - Router: 7206VXR (Dynamips)
