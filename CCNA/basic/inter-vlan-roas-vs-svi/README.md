@@ -114,8 +114,6 @@ ip 192.168.30.1/24 192.168.30.254
 1. Gateway Subinterface Status
 Verifying subinterface operational status and IP assignments:
 
-![IP INT BR](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/inter-vlan-roas-vs-svi/images/GW%20-%20Sh%20ip%20int%20br.png)
-
 ```
 GATEWAY# show ip interface brief
 Interface          IP-Address      OK? Method Status                  Protocol
@@ -130,8 +128,6 @@ FastEthernet2/0    unassigned      YES unset  administratively down   down
 Filtering Output with Pipe (| exclude)
 In environments with multiple unused or unassigned interfaces, standard output can become cluttered. The Cisco IOS pipe operator (|) combined with the exclude keyword filters out irrelevant rows, displaying only active subinterfaces with assigned IP addresses:
 
-![int br - unassigned](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/inter-vlan-roas-vs-svi/images/GW%20-%20Sh%20ip%20int%20br%20exc%20unass.png)
-
 ```
 GATEWAY# show ip interface brief | exclude unassigned
 Interface          IP-Address      OK? Method Status Protocol
@@ -144,8 +140,6 @@ FastEthernet0/0.30 192.168.30.254  YES manual up     up
 2. Switch Trunk & MAC Address Table
 Validating trunk encapsulation and dynamic MAC learning across VLANs:
 
-![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/inter-vlan-roas-vs-svi/images/sw%20-%20int%20trunk.png)
-
 ```
 SW1# show interface trunk
 Port      Mode         Encapsulation  Status        Native vlan
@@ -154,9 +148,6 @@ Et0/0     on           802.1q         trunking      1
 Port      Vlans allowed and active in management domain
 Et0/0     1,10,20,30
 ```
-
-![int status + mac](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/inter-vlan-roas-vs-svi/images/sw%20-%20int%20status%20%2B%20mac%20address%20tab.png)
-
 
 ```
 SW1# show mac address-table
@@ -193,9 +184,6 @@ Internet  192.168.30.1             2  0050.7966.6813  ARPA   FastEthernet0/0.30
 Internet  192.168.30.254           -  ca07.500d.0000  ARPA   FastEthernet0/0.30
 
 ```
-
-![arp](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/inter-vlan-roas-vs-svi/images/GW%20-%20ARP%20vpc1%2C2%2C3.png)
-
 
 ## Technical Observations & Cisco IOS Behavior
 Best Practice: Explicit VLAN Naming
@@ -247,6 +235,108 @@ The VLAN only becomes active in the output of show vlan brief once this database
 
 # Part 2: Migration to Switched Virtual Interfaces (SVI)
 
+## Overview & Updated Topology
+In this phase, the dedicated router (`GATEWAY`) is decommissioned. Inter-VLAN routing is migrated directly to `SW1` using Switched Virtual Interfaces (SVIs) on a Layer 3 Switch, processing packets via hardware ASICs.
 
+![SVI Topology](images/top-svi.png)
 
+---
 
+## 1. Baseline Verification (Post-Router Removal)
+With the router removed and trunking disabled on interface `Et0/0`, `SW1` acts strictly as a Layer 2 switch. 
+
+```
+SW1# show ip interface brief
+Interface                  IP-Address      OK? Method Status                  Protocol
+Ethernet0/0                unassigned      YES unset  up                      up
+Ethernet0/1                unassigned      YES unset  up                      up
+Ethernet0/2                unassigned      YES unset  up                      up
+Ethernet0/3                unassigned      YES unset  up                      up
+```
+
+Attempting to ping across VLANs (VPC1 to VPC2) at this stage fails because no default gateway or Layer 3 boundary exists:
+
+```
+VPCS> ping 192.168.20.1
+host (192.168.10.254) not reachable
+```
+
+## 2. SVI Configuration & State Troubleshooting
+Configuring SVIs
+Creating the virtual interfaces for VLANs 10, 20, and 30 on SW1:
+
+```
+enable
+configure terminal
+
+interface Vlan10
+ ip address 192.168.10.254 255.255.255.0
+
+interface Vlan20
+ ip address 192.168.20.254 255.255.255.0
+
+interface Vlan30
+ ip address 192.168.30.254 255.255.255.0
+```
+Cisco IOS Behavior: administratively down State
+By default, newly created SVIs remain disabled until explicitly brought up:
+
+```
+SW1(config-if)# do show ip interface brief
+Interface                  IP-Address      OK? Method Status                  Protocol
+Ethernet0/0                unassigned      YES unset  up                      up
+Ethernet0/1                unassigned      YES unset  up                      up
+Ethernet0/2                unassigned      YES unset  up                      up
+Ethernet0/3                unassigned      YES unset  up                      up
+Vlan10                     192.168.10.254  YES manual administratively down   down
+Vlan20                     192.168.20.254  YES manual administratively down   down
+Vlan30                     192.168.30.254  YES manual administratively down   down
+```
+
+Executing no shutdown on each SVI transitions their operational status to up/up:
+
+```
+SW1(config)# interface range vlan 10, vlan 20, vlan 30
+SW1(config-if-range)# no shutdown
+```
+## 3. Global IP Routing Activation
+Even with SVIs in an up/up state, a Cisco Layer 3 switch will not forward packets between subnets until global IP routing is explicitly enabled.
+
+Before running ip routing, ping requests from VPC1 to VPC2 result in a timeout:
+
+```
+VPCS> ping 192.168.20.1
+192.168.20.1 icmp_seq=1 timeout
+192.168.20.1 icmp_seq=2 timeout
+192.168.20.1 icmp_seq=3 timeout
+192.168.20.1 icmp_seq=4 timeout
+192.168.20.1 icmp_seq=5 timeout
+```
+Enabling global Layer 3 forwarding:
+
+```
+SW1(config)# ip routing
+```
+
+## 4. Final Verification & Connectivity Test
+With global routing active and ARP tables populated, inter-VLAN traffic achieves full connectivity at wire-speed:
+
+```
+VPCS> ping 192.168.20.1
+84 bytes from 192.168.20.1 icmp_seq=1 ttl=63 time=0.631 ms
+84 bytes from 192.168.20.1 icmp_seq=2 ttl=63 time=0.452 ms
+84 bytes from 192.168.20.1 icmp_seq=3 ttl=63 time=0.596 ms
+84 bytes from 192.168.20.1 icmp_seq=4 ttl=63 time=0.398 ms
+84 bytes from 192.168.20.1 icmp_seq=5 ttl=63 time=0.550 ms
+```
+---
+
+## Summary Comparison: RoaS vs. SVI
+
+| Feature | Router-on-a-Stick (RoaS) | Switched Virtual Interface (SVI) |
+| :--- | :--- | :--- |
+| **Hardware Topology** | L2 Switch + External Router | L3 Switch only |
+| **Traffic Path** | Sent up the trunk link to router CPU and back | Forwarded internally on switch backplane |
+| **Latency** | Higher (~10-25 ms in simulation) | Sub-millisecond (~0.4-0.6 ms) |
+| **Bandwidth Limits** | Constrained by physical trunk port capacity | Wire-speed ASIC switching capacity |
+| **Use Case** | Small networks / Legacy environments | Enterprise Core, Distribution & Data Center |
