@@ -282,7 +282,7 @@ A packet capture on the trunk link confirms the insertion of the 4-byte 802.1Q t
 # Part 2: Migration to Switched Virtual Interfaces (SVI)
 
 ## Overview & Updated Topology
-In this phase, the dedicated router (`GATEWAY`) is decommissioned. Inter-VLAN routing is migrated directly to `SW1` using Switched Virtual Interfaces (SVIs) on a Layer 3 forwarding is typically performed by dedicated switching ASICs rather than by an external router CPU.
+In this phase, the dedicated router (`GATEWAY`) is decommissioned. Inter-VLAN routing is migrated directly to SW1 using Switched Virtual Interfaces (SVIs) on a Layer 3 Switch, where forwarding is performed by dedicated switching ASICs.
 
 ![SVI Topology](images/top-svi.png)
 
@@ -375,7 +375,9 @@ VPCS> ping 192.168.20.1
 84 bytes from 192.168.20.1 icmp_seq=4 ttl=63 time=0.398 ms
 84 bytes from 192.168.20.1 icmp_seq=5 ttl=63 time=0.550 ms
 ```
-*Observed latency in this EVE-NG lab*
+
+_*Note: Latency values reflect measurements observed within this EVE-NG virtual lab environment._
+
 ---
 
 ## Summary Comparison: RoaS vs. SVI
