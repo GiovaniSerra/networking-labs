@@ -232,11 +232,57 @@ Executing exit or end exits the submode, triggering the system to commit changes
 The VLAN only becomes active in the output of show vlan brief once this database commit occurs.
 
 ---
+### Wireshark Packet Capture Analysis (802.1Q Validation)
+
+A packet capture on the trunk link confirms the insertion of the 4-byte 802.1Q tag (`0x8100`) with **VLAN ID = 10** for transit ICMP Echo Request packets:
+
+![802.1Q Frame Tagging in Wireshark](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/inter-vlan-roas-vs-svi/images/wireshark%201.png)
+
+**Key Observations from Packet Capture:**
+* **EtherType (`0x8100`):** Identifies the presence of the 802.1Q tag header immediately following the Layer 2 Source MAC address.
+* **VLAN Identification (`ID: 10`):** Confirms that traffic originated from VLAN 10 (VPC1) is encapsulated before traversing the trunk.
+* **Encapsulated Layer 3 Payload (`Type: IPv4 0x0800`):** The original IP packet (`192.168.10.1` -> `192.168.30.1`) remains intact inside the tagged frame.
+
+### 802.1Q Header Breakdown
+* **TPID (Tag Protocol Identifier - 16 bits):** Set to `0x8100` to identify the frame as an 802.1Q-tagged Ethernet frame.
+* **PCP (Priority Code Point - 3 bits):** Used for Layer 2 Quality of Service (QoS) prioritization (802.1p).
+* **DEI (Drop Eligible Indicator - 1 bit):** Indicates frames that may be dropped during network congestion.
+* **VLAN ID (VID - 12 bits):** Uniquely identifies the VLAN (supports up to $4094$ VLANs, from $1$ to $4094$).
+
+---
+
+### Packet Flow & De-Encapsulation Process
+
+#### 1. Frame Ingress (Switch Access Port)
+* `VPC1` sends an untagged IP packet destined for `VPC2` (`192.168.20.1`) to its Default Gateway (`192.168.10.254`).
+* Switch `SW1` receives the untagged frame on interface `Ethernet0/1` (assigned to VLAN 10).
+
+#### 2. Trunk Forwarding & Tag Insertion
+* `SW1` inspects its MAC address table and determines the destination MAC (Gateway) is accessible via trunk interface `Ethernet0/0`.
+* `SW1` inserts the 802.1Q tag with **VLAN ID = 10** into the frame header and transmits it across the trunk.
+
+#### 3. Router Processing (Subinterface Match)
+* The router receives the tagged frame on interface `FastEthernet0/0`.
+* The router's parser inspects the 802.1Q header:
+  * Reads **VLAN ID = 10**.
+  * Matches the tag with subinterface `FastEthernet0/0.10` configured with `encapsulation dot1Q 10`.
+* The router strips (de-encapsulates) the 802.1Q tag and processes the IP packet at Layer 3.
+
+#### 4. Inter-VLAN Forwarding & Re-Encapsulation
+* The router inspects its routing table and determines the destination IP (`192.168.20.1`) belongs to the directly connected network on subinterface `FastEthernet0/0.20`.
+* The router rewrites the Layer 2 header (Source MAC = Router, Destination MAC = VPC2) and inserts a new 802.1Q tag with **VLAN ID = 20**.
+* The frame is transmitted back down the trunk to `SW1`.
+
+#### 5. Frame Egress (Destination Access Port)
+* `SW1` receives the frame tagged with **VLAN ID = 20** on port `Ethernet0/0`.
+* `SW1` checks its MAC table for `VPC2`, strips the 802.1Q tag, and forwards the original untagged Ethernet frame out access port `Ethernet0/2` to `VPC2`.
+
+---
 
 # Part 2: Migration to Switched Virtual Interfaces (SVI)
 
 ## Overview & Updated Topology
-In this phase, the dedicated router (`GATEWAY`) is decommissioned. Inter-VLAN routing is migrated directly to `SW1` using Switched Virtual Interfaces (SVIs) on a Layer 3 Switch, processing packets via hardware ASICs.
+In this phase, the dedicated router (`GATEWAY`) is decommissioned. Inter-VLAN routing is migrated directly to `SW1` using Switched Virtual Interfaces (SVIs) on a Layer 3 forwarding is typically performed by dedicated switching ASICs rather than by an external router CPU.
 
 ![SVI Topology](images/top-svi.png)
 
@@ -329,6 +375,7 @@ VPCS> ping 192.168.20.1
 84 bytes from 192.168.20.1 icmp_seq=4 ttl=63 time=0.398 ms
 84 bytes from 192.168.20.1 icmp_seq=5 ttl=63 time=0.550 ms
 ```
+*Observed latency in this EVE-NG lab*
 ---
 
 ## Summary Comparison: RoaS vs. SVI
@@ -337,6 +384,50 @@ VPCS> ping 192.168.20.1
 | :--- | :--- | :--- |
 | **Hardware Topology** | L2 Switch + External Router | L3 Switch only |
 | **Traffic Path** | Sent up the trunk link to router CPU and back | Forwarded internally on switch backplane |
-| **Latency** | Higher (~10-25 ms in simulation) | Sub-millisecond (~0.4-0.6 ms) |
+| **Latency** | Higher (~10-25 ms in simulation) | Sub-millisecond (~0.4-0.6 ms) | *Observed latency in this EVE-NG lab*
 | **Bandwidth Limits** | Constrained by physical trunk port capacity | Wire-speed ASIC switching capacity |
 | **Use Case** | Small networks / Legacy environments | Enterprise Core, Distribution & Data Center |
+
+---
+
+## Deep Dive: Router-on-a-Stick (RoaS)
+
+### Why Router-on-a-Stick?
+Router-on-a-Stick is a traditional method used to route traffic between multiple VLANs using a single physical interface on a Layer 2 switch connected to a Layer 3 router. It relies on 802.1Q trunking and logical subinterfaces to segregate and process inter-VLAN traffic without requiring a high-end Layer 3 switch.
+
+### Advantages
+* **Cost-Effective:** Allows inter-VLAN routing using low-cost Layer 2 switches and an existing router.
+* **Granular Security Control:** Traffic between subnets must pass through the physical router interface, making it easy to apply Access Control Lists (ACLs) and inspect packets.
+* **Simplicity:** Easy to set up in small-scale topology labs and branch network implementations.
+
+### Disadvantages
+* **Single Point of Failure (SPOF):** The single physical link between the switch and router creates a vulnerability for the entire inter-VLAN infrastructure.
+* **Bandwidth Bottleneck:** All inter-VLAN traffic shares the bandwidth of a single physical link (hairpinning), leading to network congestion under heavy load.
+* **Higher Latency:** Traffic traveling back and forth over a physical medium to be processed by the router's CPU incurs extra delay compared to hardware switching.
+
+### Typical Use Cases
+* Small office / home office (SOHO) setups with minimal inter-VLAN traffic.
+* Branch networks with standard Layer 2 access switches connected to an edge router.
+* Legacy network designs or budget-constrained enterprise environments.
+
+---
+
+## Deep Dive: Switched Virtual Interfaces (SVI)
+
+### Why SVI?
+Switched Virtual Interfaces (SVIs) provide Layer 3 routing directly within a Layer 3 switch (Multilayer Switch). Instead of forwarding inter-VLAN traffic out to an external device, the switch processes packets internally on its backplane using dedicated Application-Specific Integrated Circuits (ASICs).
+
+### Advantages
+* **Wire-Speed Performance:** Routing occurs in hardware via ASICs, providing extremely high throughput and sub-millisecond latency.
+* **Elimination of Traffic Bottlenecks:** Traffic between VLANs does not leave the switch backplane, preserving physical port bandwidth.
+* **High Scalability:** Effortlessly handles dense intra-building and data center subnets without performance degradation.
+* **Simplified Cabling:** Reduces physical link count by removing the external router link for local subnet gateways.
+
+### Disadvantages
+* **Hardware Cost:** Multilayer switches (Layer 3) are significantly more expensive than standard Layer 2 switches.
+* **Resource Constraints on Control Plane:** Advanced routing capabilities or complex stateful inspection (like deep packet inspection) may require specialized hardware modules or dedicated firewalls.
+
+### Requirements
+* **Layer 3 Capable Hardware:** A switch supporting Layer 3 operations (e.g., Cisco Catalyst 3650/3850/9300 series or IOL L3 image).
+* **Global Routing Activation:** Global IP forwarding must be explicitly enabled on the switch via the `ip routing` command.
+* **Active VLAN Database:** The corresponding VLAN must exist in the switch database and have at least one active port (or trunk) associated with it for the SVI to remain in an `up/up` operational state.
