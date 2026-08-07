@@ -404,7 +404,7 @@ Router-on-a-Stick is a traditional method used to route traffic between multiple
 
 ### Disadvantages
 * **Single Point of Failure (SPOF):** The single physical link between the switch and router creates a vulnerability for the entire inter-VLAN infrastructure.
-* **Bandwidth Bottleneck:** All inter-VLAN traffic shares the bandwidth of a single physical link (hairpinning), leading to network congestion under heavy load.
+* **Bandwidth Bottleneck:** All inter-VLAN traffic shares the bandwidth of a single physical link (hairpinning (traffic traverses the same physical trunk twice)), leading to network congestion under heavy load.
 * **Higher Latency:** Traffic traveling back and forth over a physical medium to be processed by the router's CPU incurs extra delay compared to hardware switching.
 
 ### Typical Use Cases
@@ -433,3 +433,26 @@ Switched Virtual Interfaces (SVIs) provide Layer 3 routing directly within a Lay
 * **Layer 3 Capable Hardware:** A switch supporting Layer 3 operations (e.g., Cisco Catalyst 3650/3850/9300 series or IOL L3 image).
 * **Global Routing Activation:** Global IP forwarding must be explicitly enabled on the switch via the `ip routing` command.
 * **Active VLAN Database:** The corresponding VLAN must exist in the switch database and have at least one active port (or trunk) associated with it for the SVI to remain in an `up/up` operational state.
+
+---
+
+## Best Practices for Inter-VLAN Routing
+
+### 1. VLAN Management & Trunking
+* **Explicit VLAN Naming:** Always assign meaningful names to VLANs (`name SALES`, `name MANAGEMENT`) immediately after creation to prevent auto-generated defaults (`VLAN0010`) and simplify network troubleshooting.
+* **Prune Unnecessary VLANs:** Restrict allowed VLANs on trunk links using `switchport trunk allowed vlan` to prevent unnecessary broadcast traffic from flooding links.
+* **Native VLAN Security:** Never use `VLAN 1` for production or management traffic. Change the native VLAN on trunks to an unused VLAN ID to mitigate VLAN hopping attacks.
+
+### 2. Layer 3 & SVI Deployment
+* **Explicit IP Routing Activation:** Always remember that Cisco Layer 3 switches require global `ip routing` to forward packets across subnets, even if SVIs are configured in `up/up` status.
+* **Keep-Alive Port Association:** Ensure at least one access port assigned to the VLAN or an active trunk carrying the VLAN exists; otherwise, the SVI will transition to `down/down`.
+* **Subnet Alignment:** Maintain a standardized IP addressing schema where VLAN IDs correspond directly to IP subnets (e.g., `VLAN 10` = `192.168.10.0/24`) to simplify network administration.
+
+---
+
+## References & Official Documentation
+
+* [Cisco Networking Academy (NetAcad) - CCNA Enterprise Networking, Security, and Automation](https://www.netacad.com/)
+* [Cisco Official Guide: Configuring Inter-VLAN Routing](https://www.cisco.com/c/en/us/support/docs/lan-switching/inter-vlan-routing/41860-howto-L3-intervlanrouting.html)
+* [IEEE 802.1Q Standard Overview & Frame Format](https://www.ieee802.org/1/pages/802.1Q.html)
+* [Cisco IOS Command Reference - ip routing & interface vlan](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/iproute_pi/command/iri-cr-book.html)
