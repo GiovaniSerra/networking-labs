@@ -60,9 +60,58 @@ RSTP dramatically improves convergence times down to milliseconds by consolidati
 
 ## Topology Architecture
 
-![Top]()
+![Topo]()
 
-##
+### Interconnection Matrix
+
+| Source Device | Source Port | Target Device | Target Port | Connection Type |
+| :--- | :--- | :--- | :--- | :--- |
+| **SW1** | `Gi0/0` | **SW2** | `Gi0/0` | Trunk (802.1Q) |
+| **SW1** | `Gi0/1` | **SW4** | `Gi0/1` | Trunk (802.1Q) |
+| **SW1** | `Gi0/2` | **SW3** | `Gi0/2` | Trunk (802.1Q) |
+| **SW2** | `Gi0/1` | **SW3** | `Gi0/0` | Trunk (802.1Q) |
+| **SW2** | `Gi0/2` | **SW4** | `Gi0/2` | Trunk (802.1Q) |
+| **SW2** | `Gi1/0` | **VPCS5** | `eth0` | Access (VLAN 1) |
+| **SW3** | `Gi0/1` | **SW4** | `Gi0/0` | Trunk (802.1Q) |
+| **SW4** | `Gi1/0` | **VPCS6** | `eth0` | Access (VLAN 1) |
+
+---
+
+## Convergence Testing & Validation
+
+To evaluate convergence performance between IEEE 802.1D (PVST+) and IEEE 802.1w (Rapid-PVST+), a continuous ICMP traffic stream is generated from **VPCS5** to **VPCS6** during an active forwarding link shutdown.
+
+![Evidence 1]()
+
+![Evidence 2]()
+
+### Empirical Results Comparison
+
+| Metric | PVST+ (802.1D) | Rapid-PVST+ (802.1w) |
+| :--- | :--- | :--- |
+| **Observed Downtime / Failover** | ~30 - 50 seconds | ~1 - 3 seconds |
+| **Packet Loss Count** | 30+ lost ICMP packets | 1-2 lost ICMP packets |
+| **Transition Mechanics** | Timer-driven | Proposal/Agreement |
+
+> **Note on Convergence Measurements:** The failover times and packet loss metrics listed above reflect empirical data captured within this emulated lab environment. In production networks, actual convergence times may vary depending on link speed, hardware platform processing, physical distance (propagation delay), and total network diameter.
+
+---
+
+## Next Steps in This Repository
+
+Now that foundational Layer 2 loop prevention and rapid convergence concepts are established, continue exploring the evolution of Spanning Tree implementation:
+
+* **Next Level Advanced:** [PVST+ & Rapid-PVST+ Per-VLAN Load Balancing]()
+* **Enterprise Level:** [MSTP (802.1s) & L2 Hardening Security]()
+
+---
+
+## References & Further Reading
+
+* [IEEE 802.1D Standard: Media Access Control (MAC) Bridges](https://standards.ieee.org/)
+* [IEEE 802.1w Standard: Rapid Reconfiguration of Spanning Tree](https://standards.ieee.org/)
+* [Cisco Technical Support: Understanding Spanning-Tree Protocol State Transitions](https://www.cisco.com/)
+* Cisco Networking Academy: CCNA: Switching, Routing, and Wireless Essentials (SRWE)
 
 
 
