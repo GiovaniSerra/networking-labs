@@ -93,6 +93,51 @@ Cisco enhanced these standards by introducing **Per-VLAN Spanning Tree (PVST+)**
 | **SW4** | `Gi1/0` | **VPCS6** | `eth0` | Access (VLAN 1) |
 
 ---
+
+## Configuration Guide
+
+### 1. Initial Configuration
+
+SW1
+
+```
+! Baseline Configuration applied to all switches (adjust hostname accordingly)
+enable
+configure terminal
+hostname SW1
+no ip domain-lookup
+
+! Disable all unused interfaces to avoid unintended topology interference
+interface range GigabitEthernet0/3, GigabitEthernet1/1 - 3
+ shutdown
+ exit
+
+! Configure active Inter-Switch Links as 802.1Q Trunks
+interface range GigabitEthernet0/0 - 2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ no shutdown
+ exit
+
+! Console line hardening and productivity settings
+line con 0
+ exec-timeout 0 0
+ logging synchronous
+ exit
+end
+write memory
+```
+
+###Configuration Rationale & Best Practices:
+- no ip domain-lookup: By default, Cisco IOS treats any typo or unrecognised CLI command as a domain name and attempts a broadcast DNS lookup via port 53. This causes the CLI to freeze for up to 30 seconds while waiting for the DNS resolver to time out. Disabling domain lookup keeps the console responsive.
+
+- exec-timeout 0 0: Sets the console session inactivity timer to infinity (minutes seconds). This prevents the switch from automatically logging out the administrator during extended lab testing and packet capture sessions. (Note: Strictly recommended for lab environments only; production devices should maintain a strict timeout for security).
+
+- logging synchronous: Prevents unsolicited system log messages (syslog notifications, interface up/down alerts) from interrupting and splitting commands currently being typed into the CLI prompt. The IOS redisplays the half-typed command on a clean new line immediately after outputting the system message.
+
+- shutdown on Unused Interfaces: Layer 2 security and operational best practice. Unused switch ports left enabled can cause accidental spanning-tree topology recalibrations if connected incorrectly, or introduce security vulnerabilities (e.g., unauthorized switch attachments).
+
+---
 ### 2. Default PVST+ Execution & Observations
 
 Under factory default settings, all switches run Cisco PVST+ with the default priority of `32768` (resulting in a Bridge Priority of `32769` when including the Extended System ID for VLAN 1).
@@ -106,44 +151,59 @@ Under factory default settings, all switches run Cisco PVST+ with the default pr
 * **SW4:** `32769 : 5000.0004.0000`
 
 ---
-## Configuration Guide
-
-### Initial Configuration (All Switches)
-
 
 ### Decision Breakdown (Why Each Port is Forwarding or Blocking):
 
-![STP DEF BEF]()
-
 1. **SW1 (Root Bridge):**
-   * Since SW1 has the lowest MAC address, it wins the Root Bridge election.
-   * All active interfaces (`Gi0/0`, `Gi0/1`, `Gi0/2`) assume the **Designated Port (Desg / FWD)** role.
+   * Since SW1 possesses the lowest system MAC address (`5000.0001.0000`), it wins the Root Bridge election.
+   * All active operational interfaces (`Gi0/0`, `Gi0/1`, `Gi0/2`) assume the **Designated Port (Desg / FWD)** role.
 
 2. **SW2:**
-   * **Root Port:** `Gi0/0` (Direct link to SW1 with Root Path Cost = `4`).
-   * **Designated Ports:** `Gi0/1` (toward SW3), `Gi0/2` (toward SW4), and `Gi1/0` (access port to VPCS) remain in **FWD** state because SW2 has a lower Bridge ID than SW3 and SW4 on those segments.
+   * **Root Port:** `Gi0/0` (Direct link to SW1 with the lowest cumulative Root Path Cost = `4`).
+   * **Designated Ports:** `Gi0/1` (toward SW3), `Gi0/2` (toward SW4), and `Gi1/0` (access port to VPCS5) remain in **FWD** state because SW2 has a lower Bridge ID than SW3 and SW4 on those segments.
 
 3. **SW3:**
    * **Root Port:** `Gi0/2` (Direct link to SW1 with Root Path Cost = `4`).
-   * **Designated Port:** `Gi0/1` (toward SW4, because SW3 MAC `5000.0003.0000` beats SW4 MAC `5000.0004.0000`).
-   * **Alternate / Blocked Port:** `Gi0/0` (**Altn / BLK**) is blocked to prevent loops with SW2.
+   * **Designated Port:** `Gi0/1` (toward SW4, because SW3's MAC `5000.0003.0000` is lower than SW4's MAC `5000.0004.0000`).
+   * **Alternate / Blocked Port:** `Gi0/0` (**Altn / BLK**) is placed into the Blocking state to prevent a loop with SW2.
 
 4. **SW4:**
    * **Root Port:** `Gi0/1` (Direct link to SW1 with Root Path Cost = `4`).
    * **Alternate / Blocked Ports:**
      * `Gi0/0` (**Altn / BLK**) is blocked toward SW3.
      * `Gi0/2` (**Altn / BLK**) is blocked toward SW2.
-   * **Designated Port:** `Gi1/0` (Access port to VPCS) remains in **FWD** state.
+   * **Designated Port:** `Gi1/0` (Access port to VPCS6) remains in **FWD** state.
 
 ---
 
-## Convergence Testing & Validation
+## Wireshark Protocol Analysis
 
-To evaluate convergence performance between IEEE 802.1D (PVST+) and IEEE 802.1w (Rapid-PVST+), a continuous ICMP traffic stream is generated from **VPCS5** to **VPCS6** during an active forwarding link shutdown.
+To validate protocol mechanics at the data link layer, packet captures were analyzed on the trunk link between **SW1** and **SW2**.
 
-![Evidence 1]()
+### 1. IEEE 802.1D / PVST+ Configuration BPDU Deep Dive
 
-![Evidence 2]()
+Under classic PVST+, the elected Root Bridge originates and floods Configuration BPDUs periodically every **2.0 seconds** (Hello Time) across the Layer 2 broadcast domain.
+
+![PVST+ Configuration BPDU Packet Capture](./images/wireshark-pvst-bpdu.png)
+
+#### Packet Analysis Breakdown:
+* **Destination Multicast MAC:** `01:80:c2:00:00:00` (*Nearest-Customer-Bridge / Spanning Tree Multicast*).
+* **Source MAC Address:** `50:00:00:01:00:00` (Originating interface from Root Bridge **SW1**).
+* **Protocol Version Identifier:** `0` $\rightarrow$ Indicates Classic IEEE 802.1D Spanning Tree.
+* **BPDU Type:** `0x00` $\rightarrow$ Standard **Configuration BPDU** (used for tree topology maintenance).
+* **BPDU Flags (`0x00`):** 
+  * `Topology Change Acknowledgment (TCA) = No` (Bit 7).
+  * `Topology Change (TC) = No` (Bit 0).
+  * *Note:* Classic STP utilizes only the two outer bits of the 8-bit flag byte, leaving intermediate bits unused.
+* **Root Identifier:** `32768 / 1 / 50:00:00:01:00:00` (Priority `32768` + System ID Extension `1` = Total BID `32769`).
+* **Root Path Cost:** `0` (Since the frame originated directly from the Root Bridge).
+* **Protocol Timers:** 
+  * `Message Age: 0`
+  * `Max Age: 20`
+  * `Hello Time: 2`
+  * `Forward Delay: 15`
+
+---
 
 ### Empirical Results Comparison
 
