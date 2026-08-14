@@ -184,7 +184,7 @@ To validate protocol mechanics at the data link layer, packet captures were anal
 
 Under classic PVST+, the elected Root Bridge originates and floods Configuration BPDUs periodically every **2.0 seconds** (Hello Time) across the Layer 2 broadcast domain.
 
-![PVST+ Configuration BPDU Packet Capture](./images/wireshark-pvst-bpdu.png)
+![PVST+ Configuration BPDU Packet Capture](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/wireshark%20-%20config%20bpdu%20packet%20capt.png)
 
 #### Packet Analysis Breakdown:
 * **Destination Multicast MAC:** `01:80:c2:00:00:00` (*Nearest-Customer-Bridge / Spanning Tree Multicast*).
