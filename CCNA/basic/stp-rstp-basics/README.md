@@ -56,6 +56,23 @@ RSTP dramatically improves convergence times down to milliseconds by consolidati
 | Learning | **Learning** | Populates MAC table, drops data |
 | Forwarding | **Forwarding** | Active data transmission |
 
+### IEEE Standards vs Cisco Proprietary Implementations (STP/RSTP vs PVST+/Rapid-PVST+)
+
+Standard IEEE 802.1D (Common Spanning Tree - CST) maintains a **single spanning-tree instance** for the entire physical network, regardless of how many VLANs are configured. While computationally light, CST prevents per-VLAN traffic engineering and can result in suboptimal routing or unused redundant bandwidth.
+
+Cisco enhanced these standards by introducing **Per-VLAN Spanning Tree (PVST+)** and **Rapid-PVST+**:
+
+* **IEEE 802.1D (CST) vs Cisco PVST+:** Standard 802.1D evaluates one topology for all VLANs. Cisco PVST+ spawns an independent 802.1D Spanning Tree instance for **each active VLAN**, allowing deterministic load balancing across redundant trunks at the cost of higher switch CPU/RAM overhead.
+* **IEEE 802.1w (RSTP) vs Cisco Rapid-PVST+:** Standard 802.1w provides rapid convergence for a single CST instance. Cisco Rapid-PVST+ applies 802.1w convergence mechanics (Proposal/Agreement) to **every individual VLAN instance**.
+* **Encapsulation & BPDU Handling:** CST sends BPDUs untagged over IEEE 802.1Q trunks using the standard MAC address `0180.c200.0000`. PVST+ and Rapid-PVST+ encapsulate BPDUs with a proprietary SNAP header sent to MAC address `0100.0ccc.cccd`, carrying VLAN tags to maintain separate per-VLAN topologies across 802.1Q trunks.
+
+| Feature / Metric | IEEE 802.1D (CST) | Cisco PVST+ | IEEE 802.1w (RSTP) | Cisco Rapid-PVST+ |
+| :--- | :--- | :--- | :--- | :--- |
+| **Standard** | IEEE Open Standard | Cisco Proprietary | IEEE Open Standard | Cisco Proprietary |
+| **Instances** | Single (1 for all VLANs) | Multi (1 per VLAN) | Single (1 for all VLANs) | Multi (1 per VLAN) |
+| **Convergence** | Slow (~30-50s) | Slow (~30-50s) | Rapid (<2s) | Rapid (<2s) |
+| **Resource Usage** | Very Low | High (CPU/RAM per VLAN) | Low | High (CPU/RAM per VLAN) |
+
 ---
 
 ## Topology Architecture
