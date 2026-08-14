@@ -175,6 +175,26 @@ Under factory default settings, all switches run Cisco PVST+ with the default pr
    * **Designated Port:** `Gi1/0` (Access port to VPCS6) remains in **FWD** state.
 
 ---
+### Deep Dive: Analyzing a Non-Root Switch (SW4 Perspective)
+
+To truly understand spanning tree mechanics, we must analyze the protocol from the perspective of a switch that is furthest from the Root Bridge. The output from **SW4** provides a perfect example of a switch aggressively blocking ports to break physical loops.
+
+![SW4 Spanning Tree Output](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/wireshark%20-%20config%20bpdu%20packet%20capt.png)
+
+#### 1. Root ID vs. Bridge ID
+The `show spanning-tree` command splits the switch's identity into two distinct sections:
+* **Root ID (The Boss):** Displays the information of the elected Root Bridge for the VLAN. SW4 knows the Root has a MAC of `5000.0001.0000` (SW1) and calculates a cumulative **Cost of 4** to reach it. It also identifies that its local interface `Gi0/1` is the best path to get there.
+* **Bridge ID (Local Identity):** Displays SW4's own information. It has the default priority (`32769`) but the highest MAC address in the topology (`5000.0004.0000`).
+
+#### 2. Interface State Analysis
+Because SW4 has the worst (highest) Bridge ID in the core topology, it loses the segment elections against both SW2 and SW3.
+
+* **`Gi0/1` (Root Port / FWD):** This is SW4's lifeline to the Root Bridge. It connects directly to SW1. The STP cost for a GigabitEthernet link is `4`, making it the lowest-cost path.
+* **`Gi0/0` (Alternate / BLK):** This port connects to SW3. On this specific link, SW3 and SW4 compare Bridge IDs. Since SW3 (`5000.0003.0000`) is lower than SW4 (`5000.0004.0000`), SW3 becomes the Designated port for the segment. SW4 is forced to place its port into the **Alternate (Blocking)** state to prevent a loop.
+* **`Gi0/2` (Alternate / BLK):** This port connects to SW2. The exact same logic applies: SW2's MAC (`5000.0002.0000`) beats SW4. SW4 must block this port.
+* **`Gi1/0` (Designated / FWD):** This interface connects to the end host (`VPCS6`). Since PCs do not generate BPDUs, SW4 automatically wins the election on this collision domain and places the port in a **Forwarding** state.
+
+---
 
 ## Wireshark Protocol Analysis
 
