@@ -93,6 +93,49 @@ Cisco enhanced these standards by introducing **Per-VLAN Spanning Tree (PVST+)**
 | **SW4** | `Gi1/0` | **VPCS6** | `eth0` | Access (VLAN 1) |
 
 ---
+### 2. Default PVST+ Execution & Observations
+
+Under factory default settings, all switches run Cisco PVST+ with the default priority of `32768` (resulting in a Bridge Priority of `32769` when including the Extended System ID for VLAN 1).
+
+![Default STP Topology and Show Commands](./docs/default-stp-state.png)
+
+#### Baseline MAC & Bridge IDs:
+* **SW1:** `32769 : 5000.0001.0000` (Lowest MAC Address $\rightarrow$ **Elected Root Bridge**)
+* **SW2:** `32769 : 5000.0002.0000`
+* **SW3:** `32769 : 5000.0003.0000`
+* **SW4:** `32769 : 5000.0004.0000`
+
+---
+## Configuration Guide
+
+### Initial Configuration (All Switches)
+
+
+### Decision Breakdown (Why Each Port is Forwarding or Blocking):
+
+![STP DEF BEF]()
+
+1. **SW1 (Root Bridge):**
+   * Since SW1 has the lowest MAC address, it wins the Root Bridge election.
+   * All active interfaces (`Gi0/0`, `Gi0/1`, `Gi0/2`) assume the **Designated Port (Desg / FWD)** role.
+
+2. **SW2:**
+   * **Root Port:** `Gi0/0` (Direct link to SW1 with Root Path Cost = `4`).
+   * **Designated Ports:** `Gi0/1` (toward SW3), `Gi0/2` (toward SW4), and `Gi1/0` (access port to VPCS) remain in **FWD** state because SW2 has a lower Bridge ID than SW3 and SW4 on those segments.
+
+3. **SW3:**
+   * **Root Port:** `Gi0/2` (Direct link to SW1 with Root Path Cost = `4`).
+   * **Designated Port:** `Gi0/1` (toward SW4, because SW3 MAC `5000.0003.0000` beats SW4 MAC `5000.0004.0000`).
+   * **Alternate / Blocked Port:** `Gi0/0` (**Altn / BLK**) is blocked to prevent loops with SW2.
+
+4. **SW4:**
+   * **Root Port:** `Gi0/1` (Direct link to SW1 with Root Path Cost = `4`).
+   * **Alternate / Blocked Ports:**
+     * `Gi0/0` (**Altn / BLK**) is blocked toward SW3.
+     * `Gi0/2` (**Altn / BLK**) is blocked toward SW2.
+   * **Designated Port:** `Gi1/0` (Access port to VPCS) remains in **FWD** state.
+
+---
 
 ## Convergence Testing & Validation
 
