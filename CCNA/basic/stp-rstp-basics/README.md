@@ -77,7 +77,7 @@ Cisco enhanced these standards by introducing **Per-VLAN Spanning Tree (PVST+)**
 
 ## Topology Architecture
 
-![Topo]()
+![Topo](./images/topo.png)
 
 ### Interconnection Matrix
 
@@ -97,7 +97,7 @@ Cisco enhanced these standards by introducing **Per-VLAN Spanning Tree (PVST+)**
 
 Under factory default settings, all switches run Cisco PVST+ with the default priority of `32768` (resulting in a Bridge Priority of `32769` when including the Extended System ID for VLAN 1).
 
-![Default STP Topology and Show Commands](./docs/default-stp-state.png)
+![Default STP Topology and Show Commands](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/stp%20-%20bef.png)
 
 #### Baseline MAC & Bridge IDs:
 * **SW1:** `32769 : 5000.0001.0000` (Lowest MAC Address $\rightarrow$ **Elected Root Bridge**)
