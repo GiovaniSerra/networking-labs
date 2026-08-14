@@ -14,7 +14,7 @@ This laboratory provides a comprehensive analysis of Layer 2 loop prevention, br
 
 Unlike Layer 3 IP packets—which feature a Time-To-Live (TTL) header field to drop looped packets—Ethernet Layer 2 frames lack a TTL field. In a topology with redundant physical paths and no spanning-tree protocol, three major issues occur:
 
-1. **Broadcast Storms:** Switches continuously flood broadcast frames (such as ARP Requests) out of all interfaces except the receiving one. These frames loop endlessly, consuming 100% of available bandwidth and causing CPU starvation across network devices.
+1. **Broadcast Storms:** Switches generate excessive, looping Layer 2 traffic that can severely degrade network performance or saturate available bandwidth, potentially leading to a denial-of-service condition across the broadcast domain.
 2. **MAC Address Table Instability:** The constant arrival of identical source MAC addresses on different physical interfaces forces switches to continually rewrite their CAM (Content Addressable Memory) tables, crippling frame forwarding logic.
 3. **Multiple Frame Transmission:** End hosts receive duplicate copies of unicast frames, leading to protocol stack errors at the upper layers.
 
@@ -26,16 +26,25 @@ The Spanning Tree Protocol constructs a logical loop-free tree topology by strat
 
 1. **Elect One Root Bridge:** The switch with the lowest Bridge ID (BID) is elected as the central reference point for the entire Layer 2 domain.
    $$\text{Bridge ID (BID)} = \text{Bridge Priority} + \text{Extended System ID (VLAN ID)} + \text{MAC Address}$$
-2. **Determine Root Ports (RP):** Every non-Root switch elects exactly one Root Port—the interface leading to the Root Bridge with the lowest cumulative Path Cost.
-3. **Determine Designated Ports (DP):** Every network segment (collision domain) elects one Designated Port to forward traffic based on the lowest path cost toward the Root Bridge.
-4. **Block Remaining Ports (Alternate Ports):** All other interfaces not designated as Root or Designated ports are placed into a Blocking state to break physical loops.
+2. **Determine Root Ports (RP):** Every non-Root switch elects exactly one Root Port, representing the local interface receiving the best (lowest value) BPDU toward the Root Bridge. The election evaluates the following criteria in sequential order:
+   * **Lowest Root Bridge ID (Root BID):** Identifies the target Root Switch.
+   * **Lowest Root Path Cost (RPC):** Cumulative cost of the path to reach the Root Bridge.
+   * **Lowest Sender Bridge ID (Sender BID):** Evaluates the BID of the upstream neighbor switch transmitting the BPDU.
+   * **Lowest Sender Port ID (Sender PID):** Evaluates the port priority and port index of the transmitting switch interface.
+   * **Lowest Local Port ID:** Final local tie-breaker applied when multiple local interfaces receive identical BPDUs from the same upstream port.
+3. **Determine Designated Ports (DP):** Exactly one Designated Port is elected per collision domain / network segment to forward traffic toward the Root Bridge. The switch that advertises the most attractive BPDU onto the segment wins the Designated role based on the following hierarchy:
+   * **Lowest Root Path Cost:** The switch advertising the lowest cumulative path cost to the Root Bridge.
+   * **Lowest Sender Bridge ID:** If path costs are equal, the switch with the lower Bridge ID wins the designated role for the segment.
+   * **Lowest Sender Port ID:** If a single switch has multiple ports connected to the same shared segment, the local interface with the lowest Port ID (Priority + Port Number) becomes the Designated Port.
+4. **Block Remaining Ports (Alternate Ports):** All other interfaces not designated as Root or Designated ports are placed into an Alternate/Blocking state to break physical loops.
 
 ---
 
 ### IEEE 802.1D (STP / PVST+) vs IEEE 802.1w (RSTP / Rapid-PVST+)
 
 #### IEEE 802.1D Port States & Timers
-Classic STP relies on passive timers to safely transition interfaces without creating temporary loops, resulting in slow convergence times (up to 50 seconds):
+
+Classic STP relies on passive timers to safely transition interfaces without creating temporary loops, resulting in slow convergence times. Under classic 802.1D Spanning Tree, standard topology reconvergence can take up to 50 seconds based on default timers: **Max Age (20s)** in the event of direct/indirect failure detection, followed by **Listening (15s)** and **Learning (15s)** states before reaching Forwarding.
 
 | Port State | Function | Timer |
 | :--- | :--- | :--- |
@@ -46,34 +55,108 @@ Classic STP relies on passive timers to safely transition interfaces without cre
 | **Disabled** | Administrative down state | N/A |
 
 #### IEEE 802.1w Port States & Convergence Mechanics
-RSTP dramatically improves convergence times down to milliseconds by consolidating port states and introducing an active negotiation mechanism called **Proposal / Agreement**:
+
+RSTP achieves sub-second convergence primarily through the explicit **Proposal/Agreement handshake** rather than passive timer expiration. Immediate transition to forwarding depends on specific port and link classifications:
+
+1. **Edge Ports (PortFast):** Ports connected directly to end-user devices (hosts, servers) that will never receive BPDUs. They transition immediately to the Forwarding state without undergoing negotiation.
+2. **Point-to-Point Links:** Inter-switch links operating in **Full-Duplex** mode. RSTP assumes full-duplex links are point-to-point connections between two switches, enabling the bidirectional Proposal/Agreement handshake. (Half-duplex links revert to shared media mode and fallback to 802.1D timers).
+3. **Alternate & Backup Roles:** Switches maintain immediate pre-computed backup paths. If the Root Port fails, an Alternate Port immediately transitions to Root Port without recalculation delays.
 
 | 802.1D State | 802.1w State | Operational Status |
 | :--- | :--- | :--- |
-| Disabled | **Discarding** | Drops data, populates no MACs |
-| Blocking | **Discarding** | Drops data, listens to BPDUs |
-| Listening | **Discarding** | Drops data, processes BPDUs |
-| Learning | **Learning** | Populates MAC table, drops data |
-| Forwarding | **Forwarding** | Active data transmission |
-
-### IEEE Standards vs Cisco Proprietary Implementations (STP/RSTP vs PVST+/Rapid-PVST+)
-
-Standard IEEE 802.1D (Common Spanning Tree - CST) maintains a **single spanning-tree instance** for the entire physical network, regardless of how many VLANs are configured. While computationally light, CST prevents per-VLAN traffic engineering and can result in suboptimal routing or unused redundant bandwidth.
-
-Cisco enhanced these standards by introducing **Per-VLAN Spanning Tree (PVST+)** and **Rapid-PVST+**:
-
-* **IEEE 802.1D (CST) vs Cisco PVST+:** Standard 802.1D evaluates one topology for all VLANs. Cisco PVST+ spawns an independent 802.1D Spanning Tree instance for **each active VLAN**, allowing deterministic load balancing across redundant trunks at the cost of higher switch CPU/RAM overhead.
-* **IEEE 802.1w (RSTP) vs Cisco Rapid-PVST+:** Standard 802.1w provides rapid convergence for a single CST instance. Cisco Rapid-PVST+ applies 802.1w convergence mechanics (Proposal/Agreement) to **every individual VLAN instance**.
-* **Encapsulation & BPDU Handling:** CST sends BPDUs untagged over IEEE 802.1Q trunks using the standard MAC address `0180.c200.0000`. PVST+ and Rapid-PVST+ encapsulate BPDUs with a proprietary SNAP header sent to MAC address `0100.0ccc.cccd`, carrying VLAN tags to maintain separate per-VLAN topologies across 802.1Q trunks.
-
-| Feature / Metric | IEEE 802.1D (CST) | Cisco PVST+ | IEEE 802.1w (RSTP) | Cisco Rapid-PVST+ |
-| :--- | :--- | :--- | :--- | :--- |
-| **Standard** | IEEE Open Standard | Cisco Proprietary | IEEE Open Standard | Cisco Proprietary |
-| **Instances** | Single (1 for all VLANs) | Multi (1 per VLAN) | Single (1 for all VLANs) | Multi (1 per VLAN) |
-| **Convergence** | Slow (~30-50s) | Slow (~30-50s) | Rapid (<2s) | Rapid (<2s) |
-| **Resource Usage** | Very Low | High (CPU/RAM per VLAN) | Low | High (CPU/RAM per VLAN) |
+| **Disabled** | Discarding | Drops data, populates no MACs |
+| **Blocking** | Discarding | Drops data, listens to BPDUs |
+| **Listening** | Discarding | Drops data, processes BPDUs |
+| **Learning** | Learning | Populates MAC table, drops data |
+| **Forwarding** | Forwarding | Active data transmission |
 
 ---
+
+### Wireshark Protocol Analysis & Interoperability Note
+
+#### 1. IEEE 802.1D / PVST+ Configuration BPDU Deep Dive
+
+* **Destination Multicast MAC:** `01:80:c2:00:00:00` (Nearest-Customer-Bridge / Spanning Tree Multicast)
+* **Source MAC Address:** `50:00:00:01:00:00` (Originating interface from Root Bridge SW1)
+* **Protocol Version Identifier:** `0` (Classic IEEE 802.1D Spanning Tree)
+* **BPDU Type:** `0x00` (Configuration BPDU)
+* **BPDU Flags (0x00):**
+  * Topology Change Acknowledgment (TCA) = No (Bit 7)
+  * Topology Change (TC) = No (Bit 0)
+* **Root Identifier:** `32768 / 1 / 50:00:00:01:00:00` (Priority 32768 + Sys-ID-Ext 1 = BID 32769)
+* **Root Path Cost:** `0` (Originating directly from Root Bridge)
+* **Protocol Timers:** Message Age: 0, Max Age: 20s, Hello Time: 2s, Forward Delay: 15s
+
+> **Technical Note on BPDU Multicast Addressing:**  
+> In Cisco PVST+ and Rapid-PVST+, on the native VLAN (VLAN 1 by default), switches generate two types of BPDUs across trunks:
+> 1. An untagged standard IEEE BPDU sent to `0180.c200.0000` for backward compatibility with non-Cisco/CST switches.
+> 2. A Cisco-proprietary PVST+ BPDU encapsulated via SNAP and sent to `0100.0ccc.cccd` carrying the VLAN tag/TLV.  
+> For all non-native/other VLANs, BPDUs are transmitted exclusively to `0100.0ccc.cccd`.
+
+---
+
+### Verification & Empirical Validation
+
+#### 1. Verifying Spanning Tree Topology on the Root Bridge (SW1)
+
+```
+SW1# show spanning-tree vlan 1
+
+VLAN0001
+  Spanning tree enabled protocol ieee
+  Root ID    Priority    32769
+             Address     5000.0001.0000
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32769  (priority 32768 sys-id-ext 1)
+             Address     5000.0001.0000
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/0               Desg FWD 4         128.1    P2p 
+Gi0/1               Desg FWD 4         128.2    P2p 
+Gi0/2               Desg FWD 4         128.3    P2p
+```
+#### 2. Identifying Root Bridge Information Across the Domain
+
+```
+SW4# show spanning-tree root
+
+                                       Root    Hello Max Fwd
+Vlan                   Root ID          Cost    Time  Age Dly  Root Port
+---------------- -------------------- --------- ----- --- ---  ------------
+VLAN0001         32769 5000.0001.0000         4     2   20  15  Gi0/1
+```
+#### 3. Inspecting Blocked Ports (SW4)
+
+```
+SW4# show spanning-tree blockedports
+
+Name                 Blocked Interfaces List
+-------------------- ------------------------------------
+VLAN0001             Gi0/0, Gi0/2
+
+Number of blocked ports (segments) in the system : 2
+```
+
+#### 4. Detailed Interface State Breakdown (SW3 Alternate Port)
+
+```
+SW3# show spanning-tree interface GigabitEthernet 0/0 detail
+
+ Port 1 (GigabitEthernet0/0) of VLAN0001 is Alternate Alternate-Blocking 
+   Port path cost 4, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 32769, address 5000.0001.0000
+   Designated bridge has priority 32769, address 5000.0002.0000
+   Designated port id is 128.2, designated path cost 4
+   Timers: message age 1, forward delay 0, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   BPDU: sent 0, received 142
+```
 
 ## Topology Architecture
 
@@ -196,15 +279,41 @@ Because SW4 has the worst (highest) Bridge ID in the core topology, it loses the
 
 ---
 
-## Wireshark Protocol Analysis
+### Wireshark Protocol Analysis & Interoperability Note
 
-To validate protocol mechanics at the data link layer, packet captures were analyzed on the trunk link between **SW1** and **SW2**.
+#### 1. IEEE 802.1D / PVST+ Configuration BPDU Deep Dive
 
-### 1. IEEE 802.1D / PVST+ Configuration BPDU Deep Dive
+* **Destination Multicast MAC:** `01:80:c2:00:00:00` (Nearest-Customer-Bridge / Spanning Tree Multicast)
+* **Source MAC Address:** `50:00:00:01:00:00` (Originating interface from Root Bridge SW1)
+* **Protocol Version Identifier:** `0` (Classic IEEE 802.1D Spanning Tree)
+* **BPDU Type:** `0x00` (Configuration BPDU)
+* **BPDU Flags (0x00):**
+  * Topology Change Acknowledgment (TCA) = No (Bit 7)
+  * Topology Change (TC) = No (Bit 0)
+* **Root Identifier:** `32768 / 1 / 50:00:00:01:00:00` (Priority 32768 + Sys-ID-Ext 1 = BID 32769)
+* **Root Path Cost:** `0` (Originating directly from Root Bridge)
+* **Protocol Timers:** Message Age: 0, Max Age: 20s, Hello Time: 2s, Forward Delay: 15s
 
-Under classic PVST+, the elected Root Bridge originates and floods Configuration BPDUs periodically every **2.0 seconds** (Hello Time) across the Layer 2 broadcast domain.
+> **Technical Note on BPDU Multicast Addressing:**
+> In Cisco PVST+ and Rapid-PVST+, on the native VLAN (VLAN 1 by default), switches generate two types of BPDUs across trunks:
+> 1. An untagged standard IEEE BPDU sent to `0180.c200.0000` for backward compatibility with non-Cisco/CST switches.
+> 2. A Cisco-proprietary PVST+ BPDU encapsulated via SNAP and sent to `0100.0ccc.cccd` carrying the VLAN tag/TLV.
+> For all non-native/other VLANs, BPDUs are transmitted exclusively to `0100.0ccc.cccd`.
+
+---
+
+### IEEE 802.1w (RSTP / Rapid-PVST+) Rapid Convergence Mechanics
+
+RSTP achieves sub-second convergence primarily through the explicit **Proposal/Agreement handshake** rather than passive timer expiration. However, immediate transition to forwarding depends on specific port classifications:
+
+1. **Edge Ports (PortFast):** Ports connected directly to end-user devices (hosts, servers) that will never receive BPDUs. They transition immediately to the Forwarding state without undergoing negotiation.
+2. **Non-Edge / Point-to-Point Links:** Inter-switch links operating in **Full-Duplex** mode. RSTP assumes full-duplex links are point-to-point connections between two switches, enabling the bidirectional Proposal/Agreement handshake. (Half-duplex links revert to shared media mode and fallback to 802.1D timers).
+3. **Alternate & Backup Roles:** Switches maintain immediate pre-computed backup paths. If the Root Port fails, an Alternate Port immediately transitions to Root Port without recalculation delays.
+
+---
 
 ![PVST+ Configuration BPDU Packet Capture](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/wireshark%20-%20config%20bpdu%20packet%20capt.png)
+
 
 #### Packet Analysis Breakdown:
 * **Destination Multicast MAC:** `01:80:c2:00:00:00` (*Nearest-Customer-Bridge / Spanning Tree Multicast*).
@@ -223,6 +332,70 @@ Under classic PVST+, the elected Root Bridge originates and floods Configuration
   * `Hello Time: 2`
   * `Forward Delay: 15`
 
+
+---
+
+---
+
+### Verification & Empirical Validation
+
+#### 1. Verifying Spanning Tree Topology on the Root Bridge (SW1)
+
+```
+SW1# show spanning-tree vlan 1
+
+VLAN0001
+  Spanning tree enabled protocol ieee
+  Root ID    Priority    32769
+             Address     5000.0001.0000
+             This bridge is the root
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+  Bridge ID  Priority    32769  (priority 32768 sys-id-ext 1)
+             Address     5000.0001.0000
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+             Aging Time  300 sec
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/0               Desg FWD 4         128.1    P2p 
+Gi0/1               Desg FWD 4         128.2    P2p 
+Gi0/2               Desg FWD 4         128.3    P2p
+```
+#### 2. Identifying Root Bridge Information Across the Domain
+
+SW4# show spanning-tree root
+
+                                       Root    Hello Max Fwd
+Vlan                   Root ID          Cost    Time  Age Dly  Root Port
+---------------- -------------------- --------- ----- --- ---  ------------
+VLAN0001         32769 5000.0001.0000         4     2   20  15  Gi0/1
+
+
+#### 3. Inspecting Blocked Ports (SW4)
+
+SW4# show spanning-tree blockedports
+
+Name                 Blocked Interfaces List
+-------------------- ------------------------------------
+VLAN0001             Gi0/0, Gi0/2
+
+Number of blocked ports (segments) in the system : 2
+
+#### 4. Detailed Interface State Breakdown (SW3 Alternate Port)
+
+SW3# show spanning-tree interface GigabitEthernet 0/0 detail
+
+ Port 1 (GigabitEthernet0/0) of VLAN0001 is Alternate Alternate-Blocking 
+   Port path cost 4, Port priority 128, Port Identifier 128.1.
+   Designated root has priority 32769, address 5000.0001.0000
+   Designated bridge has priority 32769, address 5000.0002.0000
+   Designated port id is 128.2, designated path cost 4
+   Timers: message age 1, forward delay 0, hold 0
+   Number of transitions to forwarding state: 0
+   Link type is point-to-point by default
+   BPDU: sent 0, received 142
+   
 ---
 
 ### Empirical Results Comparison
