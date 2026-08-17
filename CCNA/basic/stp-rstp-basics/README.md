@@ -364,16 +364,18 @@ Gi0/2               Desg FWD 4         128.3    P2p
 ```
 #### 2. Identifying Root Bridge Information Across the Domain
 
+```
 SW4# show spanning-tree root
-
                                        Root    Hello Max Fwd
 Vlan                   Root ID          Cost    Time  Age Dly  Root Port
 ---------------- -------------------- --------- ----- --- ---  ------------
 VLAN0001         32769 5000.0001.0000         4     2   20  15  Gi0/1
+```
 
 
 #### 3. Inspecting Blocked Ports (SW4)
 
+```
 SW4# show spanning-tree blockedports
 
 Name                 Blocked Interfaces List
@@ -381,9 +383,11 @@ Name                 Blocked Interfaces List
 VLAN0001             Gi0/0, Gi0/2
 
 Number of blocked ports (segments) in the system : 2
+```
 
 #### 4. Detailed Interface State Breakdown (SW3 Alternate Port)
 
+```
 SW3# show spanning-tree interface GigabitEthernet 0/0 detail
 
  Port 1 (GigabitEthernet0/0) of VLAN0001 is Alternate Alternate-Blocking 
@@ -395,6 +399,7 @@ SW3# show spanning-tree interface GigabitEthernet 0/0 detail
    Number of transitions to forwarding state: 0
    Link type is point-to-point by default
    BPDU: sent 0, received 142
+```
    
 ---
 
