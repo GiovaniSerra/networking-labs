@@ -130,7 +130,9 @@ Bit 7      Bit 6      Bit 5      Bit 4      Bit 3      Bit 2      Bit 1      Bit
 
 Bit 7 (TCA - Topology Change Acknowledgment): Set by the upstream switch to confirm receipt of a Topology Change Notification (TCN).
 Bit 0 (TC - Topology Change): Set by the Root Bridge to notify all downstream switches to reduce their MAC address table aging timer from 300s to Forward Delay (15s).
+
 ---
+
 ### 2. IEEE 802.1w Rapid Spanning Tree BPDU Header
 IEEE 802.1w introduces the RST BPDU, keeping backwards compatibility with 802.1D frame parsers while utilizing previously reserved fields for deterministic negotiation:
 
