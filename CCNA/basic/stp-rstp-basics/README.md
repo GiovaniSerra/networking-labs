@@ -40,6 +40,24 @@ The Spanning Tree Protocol constructs a logical loop-free tree topology by strat
 
 ---
 
+## Topology Architecture
+
+![Topo](./images/topo.png)
+
+### Interconnection Matrix
+
+| Source Device | Source Port | Target Device | Target Port | Connection Type |
+| :--- | :--- | :--- | :--- | :--- |
+| **SW1** | `Gi0/0` | **SW2** | `Gi0/0` | Trunk (802.1Q) |
+| **SW1** | `Gi0/1` | **SW4** | `Gi0/1` | Trunk (802.1Q) |
+| **SW1** | `Gi0/2` | **SW3** | `Gi0/2` | Trunk (802.1Q) |
+| **SW2** | `Gi0/1` | **SW3** | `Gi0/0` | Trunk (802.1Q) |
+| **SW2** | `Gi0/2` | **SW4** | `Gi0/2` | Trunk (802.1Q) |
+| **SW2** | `Gi1/0` | **VPCS5** | `eth0` | Access (VLAN 1) |
+| **SW3** | `Gi0/1` | **SW4** | `Gi0/0` | Trunk (802.1Q) |
+| **SW4** | `Gi1/0` | **VPCS6** | `eth0` | Access (VLAN 1) |
+---
+
 ### IEEE 802.1D (STP / PVST+) vs IEEE 802.1w (RSTP / Rapid-PVST+)
 
 #### IEEE 802.1D Port States & Timers
@@ -72,28 +90,6 @@ RSTP achieves sub-second convergence primarily through the explicit **Proposal/A
 
 ---
 
-### Wireshark Protocol Analysis & Interoperability Note
-
-#### 1. IEEE 802.1D / PVST+ Configuration BPDU Deep Dive
-
-* **Destination Multicast MAC:** `01:80:c2:00:00:00` (Nearest-Customer-Bridge / Spanning Tree Multicast)
-* **Source MAC Address:** `50:00:00:01:00:00` (Originating interface from Root Bridge SW1)
-* **Protocol Version Identifier:** `0` (Classic IEEE 802.1D Spanning Tree)
-* **BPDU Type:** `0x00` (Configuration BPDU)
-* **BPDU Flags (0x00):**
-  * Topology Change Acknowledgment (TCA) = No (Bit 7)
-  * Topology Change (TC) = No (Bit 0)
-* **Root Identifier:** `32768 / 1 / 50:00:00:01:00:00` (Priority 32768 + Sys-ID-Ext 1 = BID 32769)
-* **Root Path Cost:** `0` (Originating directly from Root Bridge)
-* **Protocol Timers:** Message Age: 0, Max Age: 20s, Hello Time: 2s, Forward Delay: 15s
-
-> **Technical Note on BPDU Multicast Addressing:**  
-> In Cisco PVST+ and Rapid-PVST+, on the native VLAN (VLAN 1 by default), switches generate two types of BPDUs across trunks:
-> 1. An untagged standard IEEE BPDU sent to `0180.c200.0000` for backward compatibility with non-Cisco/CST switches.
-> 2. A Cisco-proprietary PVST+ BPDU encapsulated via SNAP and sent to `0100.0ccc.cccd` carrying the VLAN tag/TLV.  
-> For all non-native/other VLANs, BPDUs are transmitted exclusively to `0100.0ccc.cccd`.
-
----
 ## Deep Dive: BPDU Frame Structure & Header Evolution
 
 Bridge Protocol Data Units (BPDUs) are the fundamental Layer 2 management frames switches exchange to compute the loop-free topology. Comparing the byte structure of classic 802.1D and 802.1w BPDUs reveals how RSTP achieves rapid convergence without changing the basic frame size.
@@ -213,6 +209,148 @@ Bit 0 (TC): Topology Change bit (RSTP handles TC locally and flushes CAM tables 
 
 ---
 
+## Configuration Guide
+
+### 1. Initial Configuration
+
+SW1
+
+```
+! Baseline Configuration applied to all switches (adjust hostname accordingly)
+enable
+configure terminal
+hostname SW1
+no ip domain-lookup
+```
+```
+! Disable all unused interfaces to avoid unintended topology interference
+interface range GigabitEthernet0/3, GigabitEthernet1/1 - 3
+ shutdown
+ exit
+```
+
+```
+! Configure active Inter-Switch Links as 802.1Q Trunks
+interface range GigabitEthernet0/0 - 2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ no shutdown
+ exit
+```
+
+
+```
+! Console line hardening and productivity settings
+line con 0
+ exec-timeout 0 0
+ logging synchronous
+ exit
+end
+write memory
+```
+
+###Configuration Rationale & Best Practices:
+- no ip domain-lookup: By default, Cisco IOS treats any typo or unrecognised CLI command as a domain name and attempts a broadcast DNS lookup via port 53. This causes the CLI to freeze for up to 30 seconds while waiting for the DNS resolver to time out. Disabling domain lookup keeps the console responsive.
+
+- exec-timeout 0 0: Sets the console session inactivity timer to infinity (minutes seconds). This prevents the switch from automatically logging out the administrator during extended lab testing and packet capture sessions. (Note: Strictly recommended for lab environments only; production devices should maintain a strict timeout for security).
+
+- logging synchronous: Prevents unsolicited system log messages (syslog notifications, interface up/down alerts) from interrupting and splitting commands currently being typed into the CLI prompt. The IOS redisplays the half-typed command on a clean new line immediately after outputting the system message.
+
+- shutdown on Unused Interfaces: Layer 2 security and operational best practice. Unused switch ports left enabled can cause accidental spanning-tree topology recalibrations if connected incorrectly, or introduce security vulnerabilities (e.g., unauthorized switch attachments).
+
+---
+### 2. Default PVST+ Execution & Observations
+
+Under factory default settings, all switches run Cisco PVST+ with the default priority of `32768` (resulting in a Bridge Priority of `32769` when including the Extended System ID for VLAN 1).
+
+![Default STP Topology and Show Commands](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/stp%20-%20bef.png)
+
+#### Baseline MAC & Bridge IDs:
+* **SW1:** `32769 : 5000.0001.0000` (Lowest MAC Address $\rightarrow$ **Elected Root Bridge**)
+* **SW2:** `32769 : 5000.0002.0000`
+* **SW3:** `32769 : 5000.0003.0000`
+* **SW4:** `32769 : 5000.0004.0000`
+
+---
+
+### Decision Breakdown (Why Each Port is Forwarding or Blocking):
+
+1. **SW1 (Root Bridge):**
+   * Since SW1 possesses the lowest system MAC address (`5000.0001.0000`), it wins the Root Bridge election.
+   * All active operational interfaces (`Gi0/0`, `Gi0/1`, `Gi0/2`) assume the **Designated Port (Desg / FWD)** role.
+
+2. **SW2:**
+   * **Root Port:** `Gi0/0` (Direct link to SW1 with the lowest cumulative Root Path Cost = `4`).
+   * **Designated Ports:** `Gi0/1` (toward SW3), `Gi0/2` (toward SW4), and `Gi1/0` (access port to VPCS5) remain in **FWD** state because SW2 has a lower Bridge ID than SW3 and SW4 on those segments.
+
+3. **SW3:**
+   * **Root Port:** `Gi0/2` (Direct link to SW1 with Root Path Cost = `4`).
+   * **Designated Port:** `Gi0/1` (toward SW4, because SW3's MAC `5000.0003.0000` is lower than SW4's MAC `5000.0004.0000`).
+   * **Alternate / Blocked Port:** `Gi0/0` (**Altn / BLK**) is placed into the Blocking state to prevent a loop with SW2.
+
+4. **SW4:**
+   * **Root Port:** `Gi0/1` (Direct link to SW1 with Root Path Cost = `4`).
+   * **Alternate / Blocked Ports:**
+     * `Gi0/0` (**Altn / BLK**) is blocked toward SW3.
+     * `Gi0/2` (**Altn / BLK**) is blocked toward SW2.
+   * **Designated Port:** `Gi1/0` (Access port to VPCS6) remains in **FWD** state.
+
+---
+
+### Deep Dive: Analyzing a Non-Root Switch (SW4 Perspective)
+
+To truly understand spanning tree mechanics, we must analyze the protocol from the perspective of a switch that is furthest from the Root Bridge. The output from **SW4** provides a perfect example of a switch aggressively blocking ports to break physical loops.
+
+![SW4 Spanning Tree Output](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/Expl%20sw4%20-%20stp%20outp.png)
+
+#### 1. Root ID vs. Bridge ID
+The `show spanning-tree` command splits the switch's identity into two distinct sections:
+* **Root ID (The Boss):** Displays the information of the elected Root Bridge for the VLAN. SW4 knows the Root has a MAC of `5000.0001.0000` (SW1) and calculates a cumulative **Cost of 4** to reach it. It also identifies that its local interface `Gi0/1` is the best path to get there.
+* **Bridge ID (Local Identity):** Displays SW4's own information. It has the default priority (`32769`) but the highest MAC address in the topology (`5000.0004.0000`).
+
+#### 2. Interface State Analysis
+Because SW4 has the worst (highest) Bridge ID in the core topology, it loses the segment elections against both SW2 and SW3.
+
+* **`Gi0/1` (Root Port / FWD):** This is SW4's lifeline to the Root Bridge. It connects directly to SW1. The STP cost for a GigabitEthernet link is `4`, making it the lowest-cost path.
+* **`Gi0/0` (Alternate / BLK):** This port connects to SW3. On this specific link, SW3 and SW4 compare Bridge IDs. Since SW3 (`5000.0003.0000`) is lower than SW4 (`5000.0004.0000`), SW3 becomes the Designated port for the segment. SW4 is forced to place its port into the **Alternate (Blocking)** state to prevent a loop.
+* **`Gi0/2` (Alternate / BLK):** This port connects to SW2. The exact same logic applies: SW2's MAC (`5000.0002.0000`) beats SW4. SW4 must block this port.
+* **`Gi1/0` (Designated / FWD):** This interface connects to the end host (`VPCS6`). Since PCs do not generate BPDUs, SW4 automatically wins the election on this collision domain and places the port in a **Forwarding** state.
+
+---
+
+### Wireshark Protocol Analysis & Interoperability Note
+
+#### 1. IEEE 802.1D / PVST+ Configuration BPDU Deep Dive
+
+* **Destination Multicast MAC:** `01:80:c2:00:00:00` (Nearest-Customer-Bridge / Spanning Tree Multicast)
+* **Source MAC Address:** `50:00:00:01:00:00` (Originating interface from Root Bridge SW1)
+* **Protocol Version Identifier:** `0` (Classic IEEE 802.1D Spanning Tree)
+* **BPDU Type:** `0x00` (Configuration BPDU)
+* **BPDU Flags (0x00):**
+  * Topology Change Acknowledgment (TCA) = No (Bit 7)
+  * Topology Change (TC) = No (Bit 0)
+* **Root Identifier:** `32768 / 1 / 50:00:00:01:00:00` (Priority 32768 + Sys-ID-Ext 1 = BID 32769)
+* **Root Path Cost:** `0` (Originating directly from Root Bridge)
+* **Protocol Timers:** Message Age: 0, Max Age: 20s, Hello Time: 2s, Forward Delay: 15s
+
+> **Technical Note on BPDU Multicast Addressing:**
+> In Cisco PVST+ and Rapid-PVST+, on the native VLAN (VLAN 1 by default), switches generate two types of BPDUs across trunks:
+> 1. An untagged standard IEEE BPDU sent to `0180.c200.0000` for backward compatibility with non-Cisco/CST switches.
+> 2. A Cisco-proprietary PVST+ BPDU encapsulated via SNAP and sent to `0100.0ccc.cccd` carrying the VLAN tag/TLV.
+> For all non-native/other VLANs, BPDUs are transmitted exclusively to `0100.0ccc.cccd`.
+
+---
+
+### IEEE 802.1w (RSTP / Rapid-PVST+) Rapid Convergence Mechanics
+
+RSTP achieves sub-second convergence primarily through the explicit **Proposal/Agreement handshake** rather than passive timer expiration. However, immediate transition to forwarding depends on specific port classifications:
+
+1. **Edge Ports (PortFast):** Ports connected directly to end-user devices (hosts, servers) that will never receive BPDUs. They transition immediately to the Forwarding state without undergoing negotiation.
+2. **Non-Edge / Point-to-Point Links:** Inter-switch links operating in **Full-Duplex** mode. RSTP assumes full-duplex links are point-to-point connections between two switches, enabling the bidirectional Proposal/Agreement handshake. (Half-duplex links revert to shared media mode and fallback to 802.1D timers).
+3. **Alternate & Backup Roles:** Switches maintain immediate pre-computed backup paths. If the Root Port fails, an Alternate Port immediately transitions to Root Port without recalculation delays.
+
+---
+
 ### Verification & Empirical Validation
 
 #### 1. Verifying Spanning Tree Topology on the Root Bridge (SW1)
@@ -276,158 +414,6 @@ SW3# show spanning-tree interface GigabitEthernet 0/0 detail
    BPDU: sent 0, received 142
 ```
 
-## Topology Architecture
-
-![Topo](./images/topo.png)
-
-### Interconnection Matrix
-
-| Source Device | Source Port | Target Device | Target Port | Connection Type |
-| :--- | :--- | :--- | :--- | :--- |
-| **SW1** | `Gi0/0` | **SW2** | `Gi0/0` | Trunk (802.1Q) |
-| **SW1** | `Gi0/1` | **SW4** | `Gi0/1` | Trunk (802.1Q) |
-| **SW1** | `Gi0/2` | **SW3** | `Gi0/2` | Trunk (802.1Q) |
-| **SW2** | `Gi0/1` | **SW3** | `Gi0/0` | Trunk (802.1Q) |
-| **SW2** | `Gi0/2` | **SW4** | `Gi0/2` | Trunk (802.1Q) |
-| **SW2** | `Gi1/0` | **VPCS5** | `eth0` | Access (VLAN 1) |
-| **SW3** | `Gi0/1` | **SW4** | `Gi0/0` | Trunk (802.1Q) |
-| **SW4** | `Gi1/0` | **VPCS6** | `eth0` | Access (VLAN 1) |
-
----
-
-## Configuration Guide
-
-### 1. Initial Configuration
-
-SW1
-
-```
-! Baseline Configuration applied to all switches (adjust hostname accordingly)
-enable
-configure terminal
-hostname SW1
-no ip domain-lookup
-
-! Disable all unused interfaces to avoid unintended topology interference
-interface range GigabitEthernet0/3, GigabitEthernet1/1 - 3
- shutdown
- exit
-
-! Configure active Inter-Switch Links as 802.1Q Trunks
-interface range GigabitEthernet0/0 - 2
- switchport trunk encapsulation dot1q
- switchport mode trunk
- no shutdown
- exit
-
-! Console line hardening and productivity settings
-line con 0
- exec-timeout 0 0
- logging synchronous
- exit
-end
-write memory
-```
-
-###Configuration Rationale & Best Practices:
-- no ip domain-lookup: By default, Cisco IOS treats any typo or unrecognised CLI command as a domain name and attempts a broadcast DNS lookup via port 53. This causes the CLI to freeze for up to 30 seconds while waiting for the DNS resolver to time out. Disabling domain lookup keeps the console responsive.
-
-- exec-timeout 0 0: Sets the console session inactivity timer to infinity (minutes seconds). This prevents the switch from automatically logging out the administrator during extended lab testing and packet capture sessions. (Note: Strictly recommended for lab environments only; production devices should maintain a strict timeout for security).
-
-- logging synchronous: Prevents unsolicited system log messages (syslog notifications, interface up/down alerts) from interrupting and splitting commands currently being typed into the CLI prompt. The IOS redisplays the half-typed command on a clean new line immediately after outputting the system message.
-
-- shutdown on Unused Interfaces: Layer 2 security and operational best practice. Unused switch ports left enabled can cause accidental spanning-tree topology recalibrations if connected incorrectly, or introduce security vulnerabilities (e.g., unauthorized switch attachments).
-
----
-### 2. Default PVST+ Execution & Observations
-
-Under factory default settings, all switches run Cisco PVST+ with the default priority of `32768` (resulting in a Bridge Priority of `32769` when including the Extended System ID for VLAN 1).
-
-![Default STP Topology and Show Commands](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/stp%20-%20bef.png)
-
-#### Baseline MAC & Bridge IDs:
-* **SW1:** `32769 : 5000.0001.0000` (Lowest MAC Address $\rightarrow$ **Elected Root Bridge**)
-* **SW2:** `32769 : 5000.0002.0000`
-* **SW3:** `32769 : 5000.0003.0000`
-* **SW4:** `32769 : 5000.0004.0000`
-
----
-
-### Decision Breakdown (Why Each Port is Forwarding or Blocking):
-
-1. **SW1 (Root Bridge):**
-   * Since SW1 possesses the lowest system MAC address (`5000.0001.0000`), it wins the Root Bridge election.
-   * All active operational interfaces (`Gi0/0`, `Gi0/1`, `Gi0/2`) assume the **Designated Port (Desg / FWD)** role.
-
-2. **SW2:**
-   * **Root Port:** `Gi0/0` (Direct link to SW1 with the lowest cumulative Root Path Cost = `4`).
-   * **Designated Ports:** `Gi0/1` (toward SW3), `Gi0/2` (toward SW4), and `Gi1/0` (access port to VPCS5) remain in **FWD** state because SW2 has a lower Bridge ID than SW3 and SW4 on those segments.
-
-3. **SW3:**
-   * **Root Port:** `Gi0/2` (Direct link to SW1 with Root Path Cost = `4`).
-   * **Designated Port:** `Gi0/1` (toward SW4, because SW3's MAC `5000.0003.0000` is lower than SW4's MAC `5000.0004.0000`).
-   * **Alternate / Blocked Port:** `Gi0/0` (**Altn / BLK**) is placed into the Blocking state to prevent a loop with SW2.
-
-4. **SW4:**
-   * **Root Port:** `Gi0/1` (Direct link to SW1 with Root Path Cost = `4`).
-   * **Alternate / Blocked Ports:**
-     * `Gi0/0` (**Altn / BLK**) is blocked toward SW3.
-     * `Gi0/2` (**Altn / BLK**) is blocked toward SW2.
-   * **Designated Port:** `Gi1/0` (Access port to VPCS6) remains in **FWD** state.
-
----
-### Deep Dive: Analyzing a Non-Root Switch (SW4 Perspective)
-
-To truly understand spanning tree mechanics, we must analyze the protocol from the perspective of a switch that is furthest from the Root Bridge. The output from **SW4** provides a perfect example of a switch aggressively blocking ports to break physical loops.
-
-![SW4 Spanning Tree Output](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/wireshark%20-%20config%20bpdu%20packet%20capt.png)
-
-#### 1. Root ID vs. Bridge ID
-The `show spanning-tree` command splits the switch's identity into two distinct sections:
-* **Root ID (The Boss):** Displays the information of the elected Root Bridge for the VLAN. SW4 knows the Root has a MAC of `5000.0001.0000` (SW1) and calculates a cumulative **Cost of 4** to reach it. It also identifies that its local interface `Gi0/1` is the best path to get there.
-* **Bridge ID (Local Identity):** Displays SW4's own information. It has the default priority (`32769`) but the highest MAC address in the topology (`5000.0004.0000`).
-
-#### 2. Interface State Analysis
-Because SW4 has the worst (highest) Bridge ID in the core topology, it loses the segment elections against both SW2 and SW3.
-
-* **`Gi0/1` (Root Port / FWD):** This is SW4's lifeline to the Root Bridge. It connects directly to SW1. The STP cost for a GigabitEthernet link is `4`, making it the lowest-cost path.
-* **`Gi0/0` (Alternate / BLK):** This port connects to SW3. On this specific link, SW3 and SW4 compare Bridge IDs. Since SW3 (`5000.0003.0000`) is lower than SW4 (`5000.0004.0000`), SW3 becomes the Designated port for the segment. SW4 is forced to place its port into the **Alternate (Blocking)** state to prevent a loop.
-* **`Gi0/2` (Alternate / BLK):** This port connects to SW2. The exact same logic applies: SW2's MAC (`5000.0002.0000`) beats SW4. SW4 must block this port.
-* **`Gi1/0` (Designated / FWD):** This interface connects to the end host (`VPCS6`). Since PCs do not generate BPDUs, SW4 automatically wins the election on this collision domain and places the port in a **Forwarding** state.
-
----
-
-### Wireshark Protocol Analysis & Interoperability Note
-
-#### 1. IEEE 802.1D / PVST+ Configuration BPDU Deep Dive
-
-* **Destination Multicast MAC:** `01:80:c2:00:00:00` (Nearest-Customer-Bridge / Spanning Tree Multicast)
-* **Source MAC Address:** `50:00:00:01:00:00` (Originating interface from Root Bridge SW1)
-* **Protocol Version Identifier:** `0` (Classic IEEE 802.1D Spanning Tree)
-* **BPDU Type:** `0x00` (Configuration BPDU)
-* **BPDU Flags (0x00):**
-  * Topology Change Acknowledgment (TCA) = No (Bit 7)
-  * Topology Change (TC) = No (Bit 0)
-* **Root Identifier:** `32768 / 1 / 50:00:00:01:00:00` (Priority 32768 + Sys-ID-Ext 1 = BID 32769)
-* **Root Path Cost:** `0` (Originating directly from Root Bridge)
-* **Protocol Timers:** Message Age: 0, Max Age: 20s, Hello Time: 2s, Forward Delay: 15s
-
-> **Technical Note on BPDU Multicast Addressing:**
-> In Cisco PVST+ and Rapid-PVST+, on the native VLAN (VLAN 1 by default), switches generate two types of BPDUs across trunks:
-> 1. An untagged standard IEEE BPDU sent to `0180.c200.0000` for backward compatibility with non-Cisco/CST switches.
-> 2. A Cisco-proprietary PVST+ BPDU encapsulated via SNAP and sent to `0100.0ccc.cccd` carrying the VLAN tag/TLV.
-> For all non-native/other VLANs, BPDUs are transmitted exclusively to `0100.0ccc.cccd`.
-
----
-
-### IEEE 802.1w (RSTP / Rapid-PVST+) Rapid Convergence Mechanics
-
-RSTP achieves sub-second convergence primarily through the explicit **Proposal/Agreement handshake** rather than passive timer expiration. However, immediate transition to forwarding depends on specific port classifications:
-
-1. **Edge Ports (PortFast):** Ports connected directly to end-user devices (hosts, servers) that will never receive BPDUs. They transition immediately to the Forwarding state without undergoing negotiation.
-2. **Non-Edge / Point-to-Point Links:** Inter-switch links operating in **Full-Duplex** mode. RSTP assumes full-duplex links are point-to-point connections between two switches, enabling the bidirectional Proposal/Agreement handshake. (Half-duplex links revert to shared media mode and fallback to 802.1D timers).
-3. **Alternate & Backup Roles:** Switches maintain immediate pre-computed backup paths. If the Root Port fails, an Alternate Port immediately transitions to Root Port without recalculation delays.
-
 ---
 
 ![PVST+ Configuration BPDU Packet Capture](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/wireshark%20-%20config%20bpdu%20packet%20capt.png)
@@ -449,9 +435,6 @@ RSTP achieves sub-second convergence primarily through the explicit **Proposal/A
   * `Max Age: 20`
   * `Hello Time: 2`
   * `Forward Delay: 15`
-
-
----
 
 ---
 
