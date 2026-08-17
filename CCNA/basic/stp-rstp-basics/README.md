@@ -491,7 +491,7 @@ Gi1/0               Desg FWD 4         128.4    P2p Edge
 
 ---
 
-### 3. Automated Root Bridge Manipulation (Root Primary & Secondary Macro)
+### 2. Automated Root Bridge Manipulation (Root Primary & Secondary Macro)
 Cisco IOS provides dynamic macro commands to automatically adjust bridge priority without manually calculating the numerical value:
 
 * - **root primary:** Forces the switch to become the Root Bridge. If the current root priority is greater than 24576, the switch sets its priority to 24576. If the current root priority is 24576 or lower, the switch sets its own priority to 4096 less than the current root priority.  
@@ -535,7 +535,7 @@ SW2# show spanning-tree vlan 1 | include Priority
 
 ---
 
-### 2. Manual Root Bridge Configuration (Explicit Priority)
+### 3. Manual Root Bridge Configuration (Explicit Priority)
 By default, the bridge priority is 32768. The extended system ID adds the VLAN ID (VLAN 1 = 32769). Priority values must be configured in multiples of 4096 (0, 4096, 8192, ..., 32768 (default), ..., 61440).
 
 To deterministically make a specific switch (e.g., SW2) the Root Bridge with the lowest priority:
@@ -830,11 +830,6 @@ SW2# show spanning-tree inconsistentports
 ```
 * **Note:** Once the upstream neighbor recovers control-plane stability and resumes transmitting periodic, valid BPDUs, Loop Guard automatically restores the port to its normal STP operational state without requiring manual intervention.
 
-To clear an interface blocked by a false positive once the upstream neighbor recovers control-plane stability, issue the protocol reset command:
-```
-SW2# clear spanning-tree detected-protocols
-```
-
 ### 4. Misconfigurations & Issues with Root Guard
 Root Guard prevents downstream devices from forcing a Root Bridge recalculation by ignoring superior BPDUs on designated interfaces.
 
@@ -914,7 +909,9 @@ If a bundle of physical links is cross-connected between two switches without an
 ```
 SW1# show spanning-tree summary | include Etherchannel
   Etherchannel misconfig guard is enabled
+```
 
+```
 SW1# show interfaces status err-disabled
 Port      Name  Status       Reason               Err-disabled Vlans
 Gi0/1           err-disabled channel-misconfig
