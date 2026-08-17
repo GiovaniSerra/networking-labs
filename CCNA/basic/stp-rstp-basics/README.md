@@ -40,24 +40,6 @@ The Spanning Tree Protocol constructs a logical loop-free tree topology by strat
 
 ---
 
-## Topology Architecture
-
-![Topo](./images/topo.png)
-
-### Interconnection Matrix
-
-| Source Device | Source Port | Target Device | Target Port | Connection Type |
-| :--- | :--- | :--- | :--- | :--- |
-| **SW1** | `Gi0/0` | **SW2** | `Gi0/0` | Trunk (802.1Q) |
-| **SW1** | `Gi0/1` | **SW4** | `Gi0/1` | Trunk (802.1Q) |
-| **SW1** | `Gi0/2` | **SW3** | `Gi0/2` | Trunk (802.1Q) |
-| **SW2** | `Gi0/1` | **SW3** | `Gi0/0` | Trunk (802.1Q) |
-| **SW2** | `Gi0/2` | **SW4** | `Gi0/2` | Trunk (802.1Q) |
-| **SW2** | `Gi1/0` | **VPCS5** | `eth0` | Access (VLAN 1) |
-| **SW3** | `Gi0/1` | **SW4** | `Gi0/0` | Trunk (802.1Q) |
-| **SW4** | `Gi1/0` | **VPCS6** | `eth0` | Access (VLAN 1) |
----
-
 ### IEEE 802.1D (STP / PVST+) vs IEEE 802.1w (RSTP / Rapid-PVST+)
 
 #### IEEE 802.1D Port States & Timers
@@ -88,6 +70,24 @@ RSTP achieves sub-second convergence primarily through the explicit **Proposal/A
 | **Learning** | Learning | Populates MAC table, drops data |
 | **Forwarding** | Forwarding | Active data transmission |
 
+---
+
+## Topology Architecture
+
+![Topo](./images/topo.png)
+
+### Interconnection Matrix
+
+| Source Device | Source Port | Target Device | Target Port | Connection Type |
+| :--- | :--- | :--- | :--- | :--- |
+| **SW1** | `Gi0/0` | **SW2** | `Gi0/0` | Trunk (802.1Q) |
+| **SW1** | `Gi0/1` | **SW4** | `Gi0/1` | Trunk (802.1Q) |
+| **SW1** | `Gi0/2` | **SW3** | `Gi0/2` | Trunk (802.1Q) |
+| **SW2** | `Gi0/1` | **SW3** | `Gi0/0` | Trunk (802.1Q) |
+| **SW2** | `Gi0/2` | **SW4** | `Gi0/2` | Trunk (802.1Q) |
+| **SW2** | `Gi1/0` | **VPCS5** | `eth0` | Access (VLAN 1) |
+| **SW3** | `Gi0/1` | **SW4** | `Gi0/0` | Trunk (802.1Q) |
+| **SW4** | `Gi1/0` | **VPCS6** | `eth0` | Access (VLAN 1) |
 ---
 
 ## Deep Dive: BPDU Frame Structure & Header Evolution
@@ -215,22 +215,23 @@ Bit 0 (TC): Topology Change bit (RSTP handles TC locally and flushes CAM tables 
 
 SW1
 
+Baseline Configuration applied to all switches
 ```
-! Baseline Configuration applied to all switches (adjust hostname accordingly)
 enable
 configure terminal
 hostname SW1
 no ip domain-lookup
 ```
+
+Disable all unused interfaces to avoid unintended topology interference
 ```
-! Disable all unused interfaces to avoid unintended topology interference
 interface range GigabitEthernet0/3, GigabitEthernet1/1 - 3
  shutdown
  exit
 ```
 
+Configure active Inter-Switch Links as 802.1Q Trunks
 ```
-! Configure active Inter-Switch Links as 802.1Q Trunks
 interface range GigabitEthernet0/0 - 2
  switchport trunk encapsulation dot1q
  switchport mode trunk
@@ -238,9 +239,8 @@ interface range GigabitEthernet0/0 - 2
  exit
 ```
 
-
+Console line productivity settings
 ```
-! Console line hardening and productivity settings
 line con 0
  exec-timeout 0 0
  logging synchronous
@@ -248,6 +248,8 @@ line con 0
 end
 write memory
 ```
+
+---
 
 ###Configuration Rationale & Best Practices:
 - no ip domain-lookup: By default, Cisco IOS treats any typo or unrecognised CLI command as a domain name and attempts a broadcast DNS lookup via port 53. This causes the CLI to freeze for up to 30 seconds while waiting for the DNS resolver to time out. Disabling domain lookup keeps the console responsive.
@@ -259,6 +261,7 @@ write memory
 - shutdown on Unused Interfaces: Layer 2 security and operational best practice. Unused switch ports left enabled can cause accidental spanning-tree topology recalibrations if connected incorrectly, or introduce security vulnerabilities (e.g., unauthorized switch attachments).
 
 ---
+
 ### 2. Default PVST+ Execution & Observations
 
 Under factory default settings, all switches run Cisco PVST+ with the default priority of `32768` (resulting in a Bridge Priority of `32769` when including the Extended System ID for VLAN 1).
