@@ -94,6 +94,124 @@ RSTP achieves sub-second convergence primarily through the explicit **Proposal/A
 > For all non-native/other VLANs, BPDUs are transmitted exclusively to `0100.0ccc.cccd`.
 
 ---
+## Deep Dive: BPDU Frame Structure & Header Evolution
+
+Bridge Protocol Data Units (BPDUs) are the fundamental Layer 2 management frames switches exchange to compute the loop-free topology. Comparing the byte structure of classic 802.1D and 802.1w BPDUs reveals how RSTP achieves rapid convergence without changing the basic frame size.
+
+---
+
+### 1. IEEE 802.1D Classic Configuration BPDU Header
+
+A standard Configuration BPDU is encapsulated directly inside an IEEE 802.3 LLC (Logical Link Control) frame with a payload length of **35 bytes**:
+
+```
++-----------------------------------------------------------------------+
+| Field Name               | Size (Bytes) | Description                 |
++--------------------------+--------------+-----------------------------+
+| Protocol Identifier      | 2            | Always 0x0000 (IEEE 802.1D) |
+| Protocol Version ID      | 1            | 0x00 for Classic STP        |
+| BPDU Type                | 1            | 0x00 (Configuration BPDU)   |
+| BPDU Flags               | 1            | Topology Change bits only   |
+| Root Identifier (Root ID)| 8            | Priority (2B) + MAC (6B)    |
+| Root Path Cost           | 4            | Cumulative path cost to Root|
+| Bridge Identifier (BID)  | 8            | Priority (2B) + MAC (6B)    |
+| Port Identifier (Port ID)| 2            | Port Priority (1B) + Number |
+| Message Age              | 2            | Time since Root originated  |
+| Max Age                  | 2            | Max time to store BPDU (20s)|
+| Hello Time               | 2            | BPDU transmission interval  |
+| Forward Delay            | 2            | Listening/Learning time(15s)|
++-----------------------------------------------------------------------+
+```
+## The 802.1D Flags Byte (1 Byte):
+Classic STP only utilizes the two extreme bits of the 8-bit flags field, leaving the middle 6 bits entirely unused:
+
+```
+Bit 7      Bit 6      Bit 5      Bit 4      Bit 3      Bit 2      Bit 1      Bit 0
++----------+----------+----------+----------+----------+----------+----------+----------+
+|   TCA    | Reserved | Reserved | Reserved | Reserved | Reserved | Reserved |    TC    |
++----------+----------+----------+----------+----------+----------+----------+----------+
+```
+
+Bit 7 (TCA - Topology Change Acknowledgment): Set by the upstream switch to confirm receipt of a Topology Change Notification (TCN).
+Bit 0 (TC - Topology Change): Set by the Root Bridge to notify all downstream switches to reduce their MAC address table aging timer from 300s to Forward Delay (15s).
+---
+### 2. IEEE 802.1w Rapid Spanning Tree BPDU Header
+IEEE 802.1w introduces the RST BPDU, keeping backwards compatibility with 802.1D frame parsers while utilizing previously reserved fields for deterministic negotiation:
+
+Protocol Version ID: Incremented to 0x02 (RSTP).
+
+BPDU Type: Updated to 0x02 (Rapid / Multiple Spanning Tree).
+
+Version 1 Length (1 Byte): Set to 0x00 (appended to indicate no additional protocol TLVs).
+
+The 802.1w Flags Byte Breakdown (Full 8-Bit Utilization):
+Instead of wasting bits, RSTP re-engineers the entire 1-byte Flags field to handle the Proposal / Agreement handshake and active role negotiation:
+
+
+```
+Bit 7      Bit 6      Bit 5      Bit 4      Bit 3      Bit 2      Bit 1      Bit 0
++----------+----------+----------+----------+----------+----------+----------+----------+
+|   TCA    |Agreement |Forwarding| Learning |   Port Role (2 bits)| Proposal |    TC    |
++----------+----------+----------+----------+----------+----------+----------+----------+
+```
+
+Bit 7 (TCA): Topology Change Acknowledgment.
+Bit 6 (Agreement): Sent in response to a Proposal to immediately transition the designated port to Forwarding.
+Bit 5 (Forwarding): Set if the sending port is currently in the Forwarding state.
+Bit 4 (Learning): Set if the sending port is actively learning MAC addresses.
+Bits 3-2 (Port Role): Identifies the exact functional role of the transmitting port:
+00 = Unknown
+01 = Alternate / Backup Port
+10 = Root Port
+11 = Designated Port
+Bit 1 (Proposal): Transmitted by a Designated port to initiate an active synchronization handshake with the neighboring switch.
+Bit 0 (TC): Topology Change bit (RSTP handles TC locally and flushes CAM tables immediately rather than using TCN BPDUs).
+
+### 1. IEEE 802.1D Classic Configuration BPDU Header Fields
+
+| Field Name | Size (Bytes) | Description |
+| :--- | :--- | :--- |
+| **Protocol Identifier** | 2 | Always `0x0000` (IEEE 802.1D) |
+| **Protocol Version ID** | 1 | `0x00` for Classic STP |
+| **BPDU Type** | 1 | `0x00` (Configuration BPDU) |
+| **BPDU Flags** | 1 | Topology Change bits only (TC / TCA) |
+| **Root Identifier (Root ID)** | 8 | Root Priority (2B) + Root MAC Address (6B) |
+| **Root Path Cost** | 4 | Cumulative path cost to the Root Bridge |
+| **Bridge Identifier (BID)** | 8 | Sender Priority (2B) + Sender MAC Address (6B) |
+| **Port Identifier (Port ID)** | 2 | Port Priority (1B) + Interface Number (1B) |
+| **Message Age** | 2 | Time elapsed since Root Bridge generated BPDU |
+| **Max Age** | 2 | Maximum time to store BPDU before discarding (20s) |
+| **Hello Time** | 2 | Periodic BPDU transmission interval (2s) |
+| **Forward Delay** | 2 | Time spent in Listening and Learning states (15s) |
+
+---
+
+### 2. IEEE 802.1w (RSTP) BPDU Flags Byte Mapping
+
+| Bit Position | Flag Name | Description |
+| :--- | :--- | :--- |
+| **Bit 7** | `TCA` | Topology Change Acknowledgment |
+| **Bit 6** | `Agreement` | Confirms Proposal to transition Designated port to Forwarding immediately |
+| **Bit 5** | `Forwarding` | Set when the transmitting port is in the Forwarding state |
+| **Bit 4** | `Learning` | Set when the transmitting port is in the Learning state |
+| **Bits 3-2** | `Port Role` | `00`: Unknown \| `01`: Alternate/Backup \| `10`: Root \| `11`: Designated |
+| **Bit 1** | `Proposal` | Initiates rapid link synchronization handshake with downstream switch |
+| **Bit 0** | `TC` | Topology Change flag (triggers direct MAC address table flushing) |
+
+---
+
+### 3. Key Architectural & Protocol Differences
+
+| Characteristic | IEEE 802.1D (STP / PVST+) | IEEE 802.1w (RSTP / Rapid-PVST+) |
+| :--- | :--- | :--- |
+| **BPDU Generation** | Only Root Bridge originates; non-roots relay | Every switch originates BPDUs every Hello interval |
+| **Missing BPDU Timeout** | 20 seconds (Max Age timer expiration) | 6 seconds (3 consecutive missed Hello intervals) |
+| **Topology Change Handling** | Transmits TCN to Root; Root sets TC flag | Switch detecting change directly flushes MAC table & floods TC |
+| **Transition Mechanism** | Passive timers (`30 - 50 seconds`) | Active Proposal/Agreement handshake (`< 1 second`) |
+| **Port Roles** | Root, Designated, Non-Designated (Blocked) | Root, Designated, Alternate, Backup |
+| **Port Operational States** | Disabled, Blocking, Listening, Learning, Forwarding | Discarding, Learning, Forwarding |
+
+---
 
 ### Verification & Empirical Validation
 
