@@ -451,6 +451,7 @@ By default, Cisco Catalyst switches run PVST+ (IEEE 802.1D). To achieve sub-seco
 ```
 configure terminal
 spanning-tree mode rapid-pvst
+txt
 end
 write memory
 ```
@@ -502,11 +503,11 @@ Gi1/0               Desg FWD 4         128.4    P2p Edge
 ### 3. Automated Root Bridge Manipulation (Root Primary & Secondary Macro)
 Cisco IOS provides dynamic macro commands to automatically adjust bridge priority without manually calculating the numerical value:
 
-root primary: Forces the switch to become the Root Bridge. If the current root priority is greater than 24576, the switch sets its priority to 24576. If the current root priority is 24576 or lower, the switch sets its own priority to 4096 less than the current root priority.
+- root primary: Forces the switch to become the Root Bridge. If the current root priority is greater than 24576, the switch sets its priority to 24576. If the current root priority is 24576 or lower, the switch sets its own priority to 4096 less than the current root priority.  
+- root secondary: Sets the switch priority to 28672, positioning it as the immediate backup if the primary Root Bridge fails.
 
-root secondary: Sets the switch priority to 28672, positioning it as the immediate backup if the primary Root Bridge fails.
+#### Setting SW1 as Primary Root and SW2 as Secondary Root
 
-Setting SW1 as Primary Root and SW2 as Secondary Root
 Configuration on SW1 (Primary Root)
 ```
 configure terminal
@@ -544,7 +545,7 @@ SW2# show spanning-tree vlan 1 | include Priority
 ---
 
 ### 2. Manual Root Bridge Configuration (Explicit Priority)
-By default, the bridge priority is 32768. The extended system ID adds the VLAN ID (VLAN 1 = 32769). Priority values must be configured in multiples of 4096 (0, 4096, 8192, 12288, 16384, 20480, 24576, 28672, 32768, 36864, 40960, 45056, 49152, 53248, 57344, 61440).
+By default, the bridge priority is 32768. The extended system ID adds the VLAN ID (VLAN 1 = 32769). Priority values must be configured in multiples of 4096 (0, 4096, 8192, ..., 32768 (default), ..., 61440).
 
 To deterministically make a specific switch (e.g., SW2) the Root Bridge with the lowest priority:
 
@@ -558,15 +559,370 @@ write memory
 
 ---
 
+
 ### Empirical Results Comparison
 
+
+### Empirical Results Comparison
+
+```
 | Metric | PVST+ (802.1D) | Rapid-PVST+ (802.1w) |
 | :--- | :--- | :--- |
-| **Observed Downtime / Failover** | ~30 - 50 seconds[cite: 1] | ~1 - 3 seconds[cite: 1] |
-| **Packet Loss Count** | 30+ lost ICMP packets[cite: 1] | 1-2 lost ICMP packets[cite: 1] |
-| **Transition Mechanics** | Timer-driven[cite: 1] | Proposal/Agreement[cite: 1] |
+| **Observed Downtime / Failover** | ~30 - 50 seconds | ~1 - 3 seconds |
+| **Packet Loss Count** | 30+ lost ICMP packets | 1 - 2 lost ICMP packets |
+| **Transition Mechanics** | Timer-driven | Proposal / Agreement |
+```
 
-> **Note on Convergence Measurements:** The failover times and packet loss metrics listed above reflect empirical data captured within this emulated lab environment[cite: 1]. In production networks, actual convergence times may vary depending on link speed, hardware platform processing, physical distance (propagation delay), and total network diameter[cite: 1].
+> **Note on Convergence Measurements:** The failover times and packet loss metrics listed above reflect empirical data captured within this emulated lab environment. In production networks, actual convergence times may vary depending on link speed, hardware platform processing, physical distance (propagation delay), and total network diameter.
+
+---
+
+### Spanning Tree Toolkit: Theoretical Deep Dive
+
+The standard Spanning Tree Protocol design inherently trusts every device connected to the network topology. If any interface receives a Bridge Protocol Data Unit (BPDU), the switch processes it and dynamically shifts its roles and ports states to adapt to what it assumes is a valid network alteration. This open architecture introduces critical operational vulnerabilities: misconfigurations (such as connecting a generic consumer switch to a wall jack) or malicious activities (such as executing an STP spoofing attack) can force a complete root bridge recalculation, degrading performance or creating active bridging loops. 
+
+To mitigate these architecture risks, the Spanning Tree Toolkit offers granular, proactive security features to enforce topology boundaries and guard the active forwarding paths.
+
+---
+
+### 1. BPDU Guard: Enforcing the Access Layer Boundary
+In a well-designed hierarchical network, access layer ports configured with **PortFast** (or designated as Edge Ports in RSTP) connect exclusively to end hosts like workstations, IP phones, and printers. These end devices operate at Layer 3 and above; they do not generate or expect Layer 2 topology management frames. 
+
+**BPDU Guard** acts as an enforcement mechanism on these edge interfaces. When enabled, the switch port continues its fast-forwarding behavior, but the background processes constantly monitor the ingress queue for BPDUs. If a user connects a rogue switch, a bridging router, or runs a software-based bridge simulator on a host, a BPDU will enter the interface. 
+
+Upon receiving even a single standard or configuration BPDU, BPDU Guard immediately steps in to isolate the threat. It transitions the operational state of the interface into **`err-disabled`** (error-disabled), effectively shutting down the physical link down to the hardware level. This action drops all user traffic and cuts off potential loop paths or spoofing vectors instantly. To recover the port, an administrator must either manually issue a `shutdown` followed by a `no shutdown` on the interface CLI or configure an automated `errdisable recovery` timer.
+
+#### Configuration
+
+##### Global Configuration (Applies to all PortFast-enabled ports automatically)
+```
+configure terminal
+spanning-tree portfast bpduguard default
+end
+write memory
+```
+
+##### Interface-Level Configuration
+
+```
+configure terminal
+interface GigabitEthernet1/0
+ switchport mode access
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+end
+write memory
+```
+
+
+##### Verification
+
+```
+SW1# show spanning-tree summary
+Switch is in rapid-pvst mode
+Root bridge for: VLAN0001
+Extended system ID           is enabled
+Portfast Default             is enabled
+Portfast Edge BPDU Guard Default is enabled
+Portfast Edge BPDU Filter Default is disabled
+Loopguard Default            is disabled
+PVST Simulation              is enabled
+Etherchannel misconfig guard is enabled
+```
+
+```
+SW1# show interfaces status err-disabled
+Port      Name  Status       Reason               Err-disabled Vlans
+Gi1/0           err-disabled bpduguard
+
+```
+
+---
+
+### 2. BPDU Filter: Controlling BPDU Propagation
+While BPDU Guard disables an interface upon detecting an anomaly, **BPDU Filter** alters the actual transmission mechanics of the protocol. It allows administrators to stop BPDUs from leaving or entering an interface, but its operational behavior shifts drastically depending on whether it is activated globally or applied explicitly at the interface level.
+
+* **Global Configuration (PortFast Default):** When enabled globally, the feature integrates smoothly with edge behaviors. When a link state transitions to up, the interface transmits exactly 10 BPDUs to probe the segment for other switches. If no return BPDUs are detected, the port stops transmitting management frames completely, reducing unnecessary CPU utilization and link overhead. However, if a BPDU is ever received during operations, the port instantly disables BPDU Filter, strips its PortFast edge status, and returns to a traditional, fully reactive spanning-tree state.
+* **Interface-Level Configuration:** This is an explicit override that completely removes the interface from the Spanning Tree instance. The port sends zero BPDUs and silently drops any inbound BPDUs without taking any protective action (like err-disabling). **Warning:** Because this effectively blinds the switch to any downstream topology loops, using interface-level BPDU Filter on cross-connected switch links will cause a catastrophic, uncontained broadcast storm.
+
+
+#### Configuration
+##### Global Configuration (Recommended for edge environments)
+```
+configure terminal
+spanning-tree portfast bpdufilter default
+end
+write memory
+```
+
+##### Interface-Level Configuration
+```
+configure terminal
+interface GigabitEthernet1/0
+ spanning-tree bpdufilter enable
+end
+write memory
+```
+
+##### Verification
+```
+SW1# show spanning-tree summary
+Switch is in rapid-pvst mode
+Root bridge for: VLAN0001
+Extended system ID           is enabled
+Portfast Default             is enabled
+Portfast Edge BPDU Guard Default is disabled
+Portfast Edge BPDU Filter Default is enabled
+Loopguard Default            is disabled
+```
+
+```
+SW1# show running-config interface GigabitEthernet 1/0
+Building configuration...
+
+Current configuration : 132 bytes
+!
+interface GigabitEthernet1/0
+ switchport mode access
+ spanning-tree portfast
+ spanning-tree bpdufilter enable
+end
+```
+
+---
+### 3. Root Guard: Protecting the Root Bridge Authority
+The Root Bridge election is purely deterministic, dictated by the lowest Bridge ID (BID). If an administrator leaves the core switches at default priority parameters, any newly provisioned access switch or foreign device possessing a marginally lower factory MAC address will automatically usurp the Root Bridge role. This structural shift forces the entire enterprise network to reroute traffic through an inadequate, lower-capacity access device, collapsing the optimized distribution forwarding tree.
+
+**Root Guard** enforces a top-down structural hierarchy. It is deployed exclusively on downstream-facing **Designated Ports** (e.g., core-to-distribution or distribution-to-access links). Root Guard allows the port to transmit and process local BPDUs normally, provided they are inferior to the current Root Bridge. 
+
+If a downstream device transmits a *superior BPDU* (claiming a better priority or lower MAC address), Root Guard refuses to relay the configuration frame or accept the new root identity. Instead, it instantly places the local interface into a **`root-inconsistent`** state. This specialized state acts as a structural block: it halts the forwarding of user data frames and drops incoming control packets, completely isolating the rogue superior switch. Unlike BPDU Guard, Root Guard does not down the link; it continuously listens. The moment the downstream device stops advertising the superior path, the port automatically moves through standard convergence states back into Forwarding.
+
+
+#### Configuration (Applied per interface on Designated Ports)
+```
+configure terminal
+interface range GigabitEthernet0/1 - 2
+ spanning-tree guard root
+end
+write memory
+```
+
+#### Verification
+```
+SW1# show spanning-tree inconsistentports
+
+   Name                 Interface              Inconsistency
+   -------------------- ---------------------- ------------------
+   VLAN0001             GigabitEthernet0/1     Root Inconsistent
+
+Number of inconsistent ports (segments) in the system : 1
+```
+```
+SW1# show spanning-tree interface GigabitEthernet 0/1 detail
+ Port 2 (GigabitEthernet0/1) of VLAN0001 is Designated Root-Inconsistent
+   Port path cost 4, Port priority 128, Port Identifier 128.2.
+   Designated root has priority 24577, address 5000.0001.0000
+   Designated bridge has priority 24577, address 5000.0001.0000
+   Designated port id is 128.2, designated path cost 0
+   Timers: message age 0, forward delay 0, hold 0
+   Number of transitions to forwarding state: 1
+   Root guard is enabled on the interface
+```
+
+---
+
+### 4. Loop Guard: Mitigating Unidirectional Failures
+Modern networks rely heavily on fiber-optic links and high-speed transceivers. These links can suffer from a structural failure known as a *unidirectional link condition*, where the physical path breaks in one direction (e.g., RX breaks while TX remains functional). If a blocking/alternate port on a downstream switch stops receiving periodic BPDUs due to a unilateral fiber cut upstream, it assumes the link is free of loops. Once its Max Age timer expires, it transitions through Listening and Learning directly into a Designated Forwarding state. Because the reverse path is still physically open, this creates an active, silent Layer 2 loop.
+
+**Loop Guard** addresses this by tracking the continuous arrival of BPDUs on non-designating interfaces (**Root Ports** and **Alternate Ports**). It introduces a state check: if BPDUs disappear on a monitored port without a corresponding link-down notification, Loop Guard prevents the interface from transitioning to a forwarding role. 
+
+Instead of moving toward a Designated status, the switch isolates the port by placing it into a **`loop-inconsistent`** state. This state completely blocks Layer 2 traffic forwarding on that interface, ensuring a unidirectional link failure cannot break the active loop-free logical path. Like Root Guard, this feature features automated recovery: the moment a valid, periodic BPDU is successfully received on the interface again, the inconsistency flag clears, and the port returns to normal operation.
+
+#### Configuration
+Global Configuration (Recommended for all non-edge point-to-point links)
+```
+configure terminal
+spanning-tree loopguard default
+end
+write memory
+```
+
+#### Interface-Level Configuration
+```
+configure terminal
+interface GigabitEthernet0/0
+ spanning-tree guard loop
+end
+write memory
+```
+
+#### Verification
+```
+SW2# show spanning-tree summary
+Switch is in rapid-pvst mode
+Root bridge for: none
+Extended system ID           is enabled
+Portfast Default             is disabled
+Portfast Edge BPDU Guard Default is disabled
+Portfast Edge BPDU Filter Default is disabled
+Loopguard Default            is enabled
+PVST Simulation              is enabled
+Etherchannel misconfig guard is enabled
+```
+
+```
+SW2# show spanning-tree inconsistentports
+
+   Name                 Interface              Inconsistency
+   -------------------- ---------------------- ------------------
+   VLAN0001             GigabitEthernet0/0     Loop Inconsistent
+
+Number of inconsistent ports (segments) in the system : 1
+```
+
+---
+
+## Troubleshooting Spanning Tree Protocol Issues
+
+### 1. Protocol Mismatch: STP (802.1D) vs. RSTP (802.1w)
+When one switch in the topology runs legacy STP (or standard PVST+) while the remaining switches run RSTP (or Rapid-PVST+), the protocol boundary defaults to backward compatibility mode. 
+
+#### Operational Impact
+RSTP features backward compatibility by falling back to 802.1D mechanics on interfaces where legacy BPDUs are detected. The specific interface drops the fast Proposal/Agreement handshake and falls back to standard timer-based transitions (Listening and Learning), causing a **30-second convergence delay** on that segment during a failover.
+
+#### Commands & Verification
+To detect an active protocol fallback on an interface, inspect the spanning-tree link type output.
+
+```
+SW1# show spanning-tree vlan 1 interface GigabitEthernet 0/1
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/0               Root FWD 4         128.1    P2p Peer(STP)
+```
+
+* **Note: The Peer(STP) designation explicitly signals that the local RSTP switch has detected 802.1D BPDUs and downgraded its transition mechanics on that link.**
+
+### 2. Protocol Mismatch Across Different VLANs
+A silent and complex issue occurs when a switch runs legacy PVST+ for one specific VLAN while running Rapid-PVST+ for others, or when a native VLAN mismatch exists across an inter-switch trunk.
+
+#### Operational Impact
+If a switch processes standard PVST+ timers for an isolated VLAN while neighboring switches expect sub-second RSTP synchronization, standard frame forwarding can resume before the legacy switch finishes its 30-second timer-based transition. This timing desynchronization results in intermittent connectivity loss, unidirectional frame loops, and temporary MAC address table instability restricted to that specific VLAN.
+
+#### Commands & Verification
+Identify the protocol operational differences by verifying the spanning-tree execution mode per VLAN.
+
+```
+SW1# show spanning-tree vlan 10 | include protocol
+  Spanning tree enabled protocol ieee
+
+SW1# show spanning-tree vlan 20 | include protocol
+  Spanning tree enabled protocol rstp
+```
+* **Note: protocol ieee indicates standard 802.1D (PVST+), whereas protocol rstp confirms the execution of 802.1w (Rapid-PVST+).**
+
+#### Misconfigurations & Issues with Loop Guard
+Loop Guard prevents bridging loops caused by unidirectional link failures by keeping an alternate or root port blocked when periodic BPDUs disappear.
+
+#### Operational Impact
+If an administrator incorrectly enables Loop Guard on a Designated Port that naturally transmits BPDUs rather than receiving them, the configuration remains inactive. Conversely, if legitimate network congestion or high control-plane CPU utilization drops or delays three consecutive inbound BPDUs on a valid Root Port, Loop Guard triggers a false positive, locking the interface into a **loop-inconsistent** state and breaking valid backup paths.
+
+#### Commands & Verification
+
+```
+SW2# show spanning-tree inconsistentports
+
+   Name                 Interface              Inconsistency
+   -------------------- ---------------------- ------------------
+   VLAN0001             GigabitEthernet0/0     Loop Inconsistent
+```
+
+To clear an interface blocked by a false positive once the upstream neighbor recovers control-plane stability, issue the protocol reset command:
+```
+SW2# clear spanning-tree detected-protocols
+```
+
+### 4. Misconfigurations & Issues with Root Guard
+Root Guard prevents downstream devices from forcing a Root Bridge recalculation by ignoring superior BPDUs on designated interfaces.
+
+#### Operational Impact
+If Root Guard is accidentally applied to the legitimate path facing the intended core Root Bridge, the port detects the core's superior BPDUs and locks up into a root-inconsistent blocking state. This breaks network transit paths and splits the Spanning Tree domain.
+
+```
+SW3# show spanning-tree inconsistentports
+
+   Name                 Interface              Inconsistency
+   -------------------- ---------------------- ------------------
+   VLAN0001             GigabitEthernet0/1     Root Inconsistent
+```
+
+Verify if Root Guard was applied to an incorrect path by looking at the detailed interface configuration:
+
+```
+SW3# show spanning-tree interface GigabitEthernet 0/1 detail
+   Port 2 (GigabitEthernet0/1) of VLAN0001 is Designated Root-Inconsistent
+   Root guard is enabled on the interface
+```
+
+### 5. Misconfigurations & Issues with BPDU Filter
+BPDU Filter stops a switch from transmitting or receiving BPDUs.
+
+#### Operational Impact
+When enabled explicitly at the interface level **(spanning-tree bpdufilter enable)**, the switch completely disables STP on that port. If this interface is accidentally cross-connected to another operational switch, the link forms a silent physical path with no loop protection. The switches will forward data frames unconditionally, resulting in an uncontained, catastrophic broadcast storm that can saturate interface links and freeze management access.
+
+#### Commands & Verification
+Because the port stops processing BPDUs entirely, it will not log an inconsistency or error-disabled state. You must find the interface-level misconfiguration by inspecting the active operational configuration or checking for high interface utilization.
+
+```
+SW1# show running-config interface GigabitEthernet 1/0
+interface GigabitEthernet1/0
+ spanning-tree bpdufilter enable
+
+SW1# show interfaces GigabitEthernet 1/0 | include input rate|output rate
+  5 minute input rate 998241000 bits/sec, 124310 packets/sec
+  5 minute output rate 999124000 bits/sec, 124402 packets/sec
+```
+
+### 6. Misconfigurations & Issues with BPDU Guard
+BPDU Guard error-disables an access interface the moment any inbound BPDU is detected.
+
+#### Operational Impact
+The primary issue stems from connecting an authorized infrastructure device (such as a downstream switch, an IP phone with an internal switch, or a hypervisor running virtual switches) to a port where an administrator left **spanning-tree bpduguard enable** active. The incoming topology or management frames immediately trip the feature, placing the port into **err-disabled** and cutting off connection for all downstream end users.
+
+#### Commands & Verification
+```
+SW1# show interfaces status err-disabled
+Port      Name  Status       Reason               Err-disabled Vlans
+Gi1/0           err-disabled bpduguard
+```
+
+To resolve the issue permanently, remove the structural guard or move the interface configuration to an inter-switch trunk. To recover the port interface state automatically without a manual administrative shutdown, configure the automatic recovery sequence:
+```
+configure terminal
+errdisable recovery cause bpduguard
+errdisable recovery interval 30
+end
+write memory
+```
+
+
+### 7. Other Common Spanning Tree Failures
+
+#### Duplex Mismatch Creating False Forwards
+When one side of an inter-switch trunk is hardcoded to Full-Duplex and the other side defaults to Half-Duplex, the half-duplex side uses Carrier Sense Multiple Access with Collision Detection (CSMA/CD) to listen before transmitting. If the full-duplex side transmits data continuously, the half-duplex switch experiences constant collisions and fails to receive inbound BPDUs. Its Max Age timer eventually expires, causing it to incorrectly transition its alternate port into a Designated Forwarding state, creating a devastating data loop.
+
+#### EtherChannel Misconfigurations
+If a bundle of physical links is cross-connected between two switches without an active aggregation protocol (such as LACP or PAGP), Spanning Tree treats each physical link as an independent operational path. Because the links are physically bundled on one side but unaggregated on the control plane, BPDUs loop back into adjacent links of the same switch, resulting in severe MAC table flapping and constant topology alterations.
+
+#### Verification
+
+```
+SW1# show spanning-tree summary | include Etherchannel
+  Etherchannel misconfig guard is enabled
+
+SW1# show interfaces status err-disabled
+Port      Name  Status       Reason               Err-disabled Vlans
+Gi0/1           err-disabled channel-misconfig
+```
 
 ---
 
