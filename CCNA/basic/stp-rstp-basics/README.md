@@ -44,7 +44,7 @@ The Spanning Tree Protocol constructs a logical loop-free tree topology by strat
 
 #### IEEE 802.1D Port States & Timers
 
-Classic STP relies on passive timers to safely transition interfaces without creating temporary loops, resulting in slow convergence times. Under classic 802.1D Spanning Tree, standard topology reconvergence can take up to 50 seconds based on default timers: **Max Age (20s)** in the event of direct/indirect failure detection, followed by **Listening (15s)** and **Learning (15s)** states before reaching Forwarding.
+Classic STP relies on timer-based state transitions to safely reconverge without creating temporary Layer 2 loops, resulting in relatively slow convergence. Under **classic IEEE 802.1D Spanning Tree**, the worst-case convergence time can reach approximately 50 seconds with default timers: **Max Age (20s)** may be required for stale BPDU information to expire, followed by **Listening (15s)** and **Learning (15s)** before the port reaches the Forwarding state.
 
 | Port State | Function | Timer |
 | :--- | :--- | :--- |
@@ -129,7 +129,7 @@ Bit 7      Bit 6      Bit 5      Bit 4      Bit 3      Bit 2      Bit 1      Bit
 ```
 
 Bit 7 (TCA - Topology Change Acknowledgment): Set by the upstream switch to confirm receipt of a Topology Change Notification (TCN).
-Bit 0 (TC - Topology Change): Set by the Root Bridge to notify all downstream switches to reduce their MAC address table aging timer from 300s to Forward Delay (15s).
+Bit 0 (TC): Topology Change bit (triggers immediate local MAC table flushing and fast TC BPDU flooding across non-edge ports without using legacy TCNs).
 
 ---
 
@@ -251,10 +251,12 @@ end
 write memory
 ```
 
+
+
 ---
 
-###Configuration Rationale & Best Practices:
-- no ip domain-lookup: By default, Cisco IOS treats any typo or unrecognised CLI command as a domain name and attempts a broadcast DNS lookup via port 53. This causes the CLI to freeze for up to 30 seconds while waiting for the DNS resolver to time out. Disabling domain lookup keeps the console responsive.
+### Configuration Rationale & Best Practices:
+- no ip domain-lookup: Prevents Cisco IOS from interpreting unrecognized CLI commands as hostnames and attempting DNS resolution via UDP port 53, which freezes the console.
 
 - exec-timeout 0 0: Sets the console session inactivity timer to infinity (minutes seconds). This prevents the switch from automatically logging out the administrator during extended lab testing and packet capture sessions. (Note: Strictly recommended for lab environments only; production devices should maintain a strict timeout for security).
 
@@ -423,42 +425,67 @@ SW3# show spanning-tree interface GigabitEthernet 0/0 detail
 
 ![PVST+ Configuration BPDU Packet Capture](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/stp-rstp-basics/images/wireshark%20-%20config%20bpdu%20packet%20capt.png)
 
-
 #### Packet Analysis Breakdown:
 * **Destination Multicast MAC:** `01:80:c2:00:00:00` (*Nearest-Customer-Bridge / Spanning Tree Multicast*).
 * **Source MAC Address:** `50:00:00:01:00:00` (Originating interface from Root Bridge **SW1**).
 * **Protocol Version Identifier:** `0` $\rightarrow$ Indicates Classic IEEE 802.1D Spanning Tree.
 * **BPDU Type:** `0x00` $\rightarrow$ Standard **Configuration BPDU** (used for tree topology maintenance).
-* **BPDU Flags (`0x00`):** 
-  * `Topology Change Acknowledgment (TCA) = No` (Bit 7).
+* **BPDU Flags (`0x00`):** * `Topology Change Acknowledgment (TCA) = No` (Bit 7).
   * `Topology Change (TC) = No` (Bit 0).
   * *Note:* Classic STP utilizes only the two outer bits of the 8-bit flag byte, leaving intermediate bits unused.
 * **Root Identifier:** `32768 / 1 / 50:00:00:01:00:00` (Priority `32768` + System ID Extension `1` = Total BID `32769`).
 * **Root Path Cost:** `0` (Since the frame originated directly from the Root Bridge).
-* **Protocol Timers:** 
-  * `Message Age: 0`
+* **Protocol Timers:** * `Message Age: 0`
   * `Max Age: 20`
   * `Hello Time: 2`
   * `Forward Delay: 15`
 
 ---
 
-### Verification & Empirical Validation
+## Rapid PVST+ (RSTP) Implementation & Root Bridge Manipulation
 
-#### 1. Verifying Spanning Tree Topology on the Root Bridge (SW1)
+### 1. Migrating to Rapid-PVST+
+By default, Cisco Catalyst switches run PVST+ (IEEE 802.1D). To achieve sub-second convergence, all switches in the Layer 2 domain must be migrated to Rapid-PVST+ (IEEE 802.1w).
+
+#### Configuration (Apply to all switches: SW1, SW2, SW3, SW4)
+```
+configure terminal
+spanning-tree mode rapid-pvst
+end
+write memory
+```
+
+---
+
+#### Verification on SW1
 
 ```
-SW1# show spanning-tree vlan 1
+SW1# show spanning-tree summary
+Switch is in rapid-pvst mode
+Root bridge for: VLAN0001
+Extended system ID           is enabled
+Portfast Default             is disabled
+Portfast Edge BPDU Guard Default is disabled
+Portfast Edge BPDU Filter Default is disabled
+Loopguard Default            is disabled
+PVST Simulation              is enabled
+Etherchannel misconfig guard is enabled
+```
+---
+#### Verification on SW2
+
+```
+SW2# show spanning-tree vlan 1
 
 VLAN0001
-  Spanning tree enabled protocol ieee
-  Root ID    Priority    32769
-             Address     5000.0001.0000
+  Spanning tree enabled protocol rstp
+  Root ID    Priority    4097
+             Address     5000.0002.0000
              This bridge is the root
              Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
 
-  Bridge ID  Priority    32769  (priority 32768 sys-id-ext 1)
-             Address     5000.0001.0000
+  Bridge ID  Priority    4097   (priority 4096 sys-id-ext 1)
+             Address     5000.0002.0000
              Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
              Aging Time  300 sec
 
@@ -466,58 +493,80 @@ Interface           Role Sts Cost      Prio.Nbr Type
 ------------------- ---- --- --------- -------- --------------------------------
 Gi0/0               Desg FWD 4         128.1    P2p 
 Gi0/1               Desg FWD 4         128.2    P2p 
-Gi0/2               Desg FWD 4         128.3    P2p
-```
-#### 2. Identifying Root Bridge Information Across the Domain
-
-```
-SW4# show spanning-tree root
-                                       Root    Hello Max Fwd
-Vlan                   Root ID          Cost    Time  Age Dly  Root Port
----------------- -------------------- --------- ----- --- ---  ------------
-VLAN0001         32769 5000.0001.0000         4     2   20  15  Gi0/1
+Gi0/2               Desg FWD 4         128.3    P2p 
+Gi1/0               Desg FWD 4         128.4    P2p Edge
 ```
 
+---
 
-#### 3. Inspecting Blocked Ports (SW4)
+### 3. Automated Root Bridge Manipulation (Root Primary & Secondary Macro)
+Cisco IOS provides dynamic macro commands to automatically adjust bridge priority without manually calculating the numerical value:
+
+root primary: Forces the switch to become the Root Bridge. If the current root priority is greater than 24576, the switch sets its priority to 24576. If the current root priority is 24576 or lower, the switch sets its own priority to 4096 less than the current root priority.
+
+root secondary: Sets the switch priority to 28672, positioning it as the immediate backup if the primary Root Bridge fails.
+
+Setting SW1 as Primary Root and SW2 as Secondary Root
+Configuration on SW1 (Primary Root)
+```
+configure terminal
+spanning-tree vlan 1 root primary
+end
+write memory
+```
+
+
+Configuration on SW2 (Secondary Root)
+```
+configure terminal
+spanning-tree vlan 1 root secondary
+end
+write memory
+```
+
+---
+Verification on SW1 (Primary)
 
 ```
-SW4# show spanning-tree blockedports
-
-Name                 Blocked Interfaces List
--------------------- ------------------------------------
-VLAN0001             Gi0/0, Gi0/2
-
-Number of blocked ports (segments) in the system : 2
+SW1# show spanning-tree vlan 1 | include Priority
+  Root ID    Priority    24577
+  Bridge ID  Priority    24577  (priority 24576 sys-id-ext 1)
 ```
 
-#### 4. Detailed Interface State Breakdown (SW3 Alternate Port)
+Verification on SW2 (Secondary)
 
 ```
-SW3# show spanning-tree interface GigabitEthernet 0/0 detail
-
- Port 1 (GigabitEthernet0/0) of VLAN0001 is Alternate Alternate-Blocking 
-   Port path cost 4, Port priority 128, Port Identifier 128.1.
-   Designated root has priority 32769, address 5000.0001.0000
-   Designated bridge has priority 32769, address 5000.0002.0000
-   Designated port id is 128.2, designated path cost 4
-   Timers: message age 1, forward delay 0, hold 0
-   Number of transitions to forwarding state: 0
-   Link type is point-to-point by default
-   BPDU: sent 0, received 142
+SW2# show spanning-tree vlan 1 | include Priority
+  Root ID    Priority    24577
+  Bridge ID  Priority    28673  (priority 28672 sys-id-ext 1)
 ```
-   
+
+---
+
+### 2. Manual Root Bridge Configuration (Explicit Priority)
+By default, the bridge priority is 32768. The extended system ID adds the VLAN ID (VLAN 1 = 32769). Priority values must be configured in multiples of 4096 (0, 4096, 8192, 12288, 16384, 20480, 24576, 28672, 32768, 36864, 40960, 45056, 49152, 53248, 57344, 61440).
+
+To deterministically make a specific switch (e.g., SW2) the Root Bridge with the lowest priority:
+
+Configuration on SW2
+```
+configure terminal
+spanning-tree vlan 1 priority 4096
+end
+write memory
+```
+
 ---
 
 ### Empirical Results Comparison
 
 | Metric | PVST+ (802.1D) | Rapid-PVST+ (802.1w) |
 | :--- | :--- | :--- |
-| **Observed Downtime / Failover** | ~30 - 50 seconds | ~1 - 3 seconds |
-| **Packet Loss Count** | 30+ lost ICMP packets | 1-2 lost ICMP packets |
-| **Transition Mechanics** | Timer-driven | Proposal/Agreement |
+| **Observed Downtime / Failover** | ~30 - 50 seconds[cite: 1] | ~1 - 3 seconds[cite: 1] |
+| **Packet Loss Count** | 30+ lost ICMP packets[cite: 1] | 1-2 lost ICMP packets[cite: 1] |
+| **Transition Mechanics** | Timer-driven[cite: 1] | Proposal/Agreement[cite: 1] |
 
-> **Note on Convergence Measurements:** The failover times and packet loss metrics listed above reflect empirical data captured within this emulated lab environment. In production networks, actual convergence times may vary depending on link speed, hardware platform processing, physical distance (propagation delay), and total network diameter.
+> **Note on Convergence Measurements:** The failover times and packet loss metrics listed above reflect empirical data captured within this emulated lab environment[cite: 1]. In production networks, actual convergence times may vary depending on link speed, hardware platform processing, physical distance (propagation delay), and total network diameter[cite: 1].
 
 ---
 
