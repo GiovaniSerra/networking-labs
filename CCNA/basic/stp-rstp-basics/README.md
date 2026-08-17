@@ -80,14 +80,14 @@ RSTP achieves sub-second convergence primarily through the explicit **Proposal/A
 
 | Source Device | Source Port | Target Device | Target Port | Connection Type |
 | :--- | :--- | :--- | :--- | :--- |
-| **SW1** | `Gi0/0` | **SW2** | `Gi0/0` | Trunk (802.1Q) |
-| **SW1** | `Gi0/1` | **SW4** | `Gi0/1` | Trunk (802.1Q) |
-| **SW1** | `Gi0/2` | **SW3** | `Gi0/2` | Trunk (802.1Q) |
-| **SW2** | `Gi0/1` | **SW3** | `Gi0/0` | Trunk (802.1Q) |
-| **SW2** | `Gi0/2` | **SW4** | `Gi0/2` | Trunk (802.1Q) |
-| **SW2** | `Gi1/0` | **VPCS5** | `eth0` | Access (VLAN 1) |
-| **SW3** | `Gi0/1` | **SW4** | `Gi0/0` | Trunk (802.1Q) |
-| **SW4** | `Gi1/0` | **VPCS6** | `eth0` | Access (VLAN 1) |
+| **SW1** | Gi0/0 | **SW2** | Gi0/0 | Trunk (802.1Q) |
+| **SW1** | Gi0/1 | **SW4** | Gi0/1 | Trunk (802.1Q) |
+| **SW1** | Gi0/2 | **SW3** | Gi0/2 | Trunk (802.1Q) |
+| **SW2** | Gi0/1 | **SW3** | Gi0/0 | Trunk (802.1Q) |
+| **SW2** | Gi0/2 | **SW4** | Gi0/2 | Trunk (802.1Q) |
+| **SW2** | Gi1/0 | **VPCS5** | eth0 | Access (VLAN 1) |
+| **SW3** | Gi0/1 | **SW4** | Gi0/0 | Trunk (802.1Q) |
+| **SW4** | Gi1/0 | **VPCS6** | eth0 | Access (VLAN 1) |
 ---
 
 ## Deep Dive: BPDU Frame Structure & Header Evolution
@@ -97,29 +97,25 @@ Bridge Protocol Data Units (BPDUs) are the fundamental Layer 2 management frames
 ---
 
 ### 1. IEEE 802.1D Classic Configuration BPDU Header
+A standard Configuration BPDU is encapsulated directly inside an IEEE 802.3 LLC (Logical Link Control) frame with a payload length of 35 bytes:
 
-A standard Configuration BPDU is encapsulated directly inside an IEEE 802.3 LLC (Logical Link Control) frame with a payload length of **35 bytes**:
+| Field Name | Size (Bytes) | Description |
+| :--- | :--- | :--- |
+| Protocol Identifier | 2 | Always 0x0000 (IEEE 802.1D) |
+| Protocol Version ID | 1 | 0x00 for Classic STP |
+| BPDU Type | 1 | 0x00 (Configuration BPDU) |
+| BPDU Flags | 1 | Topology Change bits only (TC / TCA) |
+| Root Identifier (Root ID) | 8 | Root Priority (2B) + Root MAC Address (6B) |
+| Root Path Cost | 4 | Cumulative path cost to the Root Bridge |
+| Bridge Identifier (BID) | 8 | Sender Priority (2B) + Sender MAC Address (6B) |
+| Port Identifier (Port ID) | 2 | Port Priority (1B) + Interface Number (1B) |
+| Message Age | 2 | Time elapsed since Root Bridge generated BPDU |
+| Max Age | 2 | Maximum time to store BPDU before discarding (20s) |
+| Hello Time | 2 | Periodic BPDU transmission interval (2s) |
+| Forward Delay | 2 | Time spent in Listening and Learning states (15s) |
 
-```
-+-----------------------------------------------------------------------+
-| Field Name               | Size (Bytes) | Description                 |
-+--------------------------+--------------+-----------------------------+
-| Protocol Identifier      | 2            | Always 0x0000 (IEEE 802.1D) |
-| Protocol Version ID      | 1            | 0x00 for Classic STP        |
-| BPDU Type                | 1            | 0x00 (Configuration BPDU)   |
-| BPDU Flags               | 1            | Topology Change bits only   |
-| Root Identifier (Root ID)| 8            | Priority (2B) + MAC (6B)    |
-| Root Path Cost           | 4            | Cumulative path cost to Root|
-| Bridge Identifier (BID)  | 8            | Priority (2B) + MAC (6B)    |
-| Port Identifier (Port ID)| 2            | Port Priority (1B) + Number |
-| Message Age              | 2            | Time since Root originated  |
-| Max Age                  | 2            | Max time to store BPDU (20s)|
-| Hello Time               | 2            | BPDU transmission interval  |
-| Forward Delay            | 2            | Listening/Learning time(15s)|
-+-----------------------------------------------------------------------+
-```
-## The 802.1D Flags Byte (1 Byte):
-Classic STP only utilizes the two extreme bits of the 8-bit flags field, leaving the middle 6 bits entirely unused:
+#### The 802.1D Flags Byte (1 Byte)
+Classic STP utilizes only the two extreme bits of the 8-bit flags field, leaving the middle 6 bits entirely unused:
 
 ```
 Bit 7      Bit 6      Bit 5      Bit 4      Bit 3      Bit 2      Bit 1      Bit 0
@@ -129,41 +125,37 @@ Bit 7      Bit 6      Bit 5      Bit 4      Bit 3      Bit 2      Bit 1      Bit
 ```
 
 Bit 7 (TCA - Topology Change Acknowledgment): Set by the upstream switch to confirm receipt of a Topology Change Notification (TCN).
-Bit 0 (TC): Topology Change bit (triggers immediate local MAC table flushing and fast TC BPDU flooding across non-edge ports without using legacy TCNs).
+Bit 0 (TC - Topology Change): Set by the Root Bridge to notify downstream switches to reduce their MAC address table aging timer from 300s to Forward Delay (15s).
 
 ---
 
 ### 2. IEEE 802.1w Rapid Spanning Tree BPDU Header
-IEEE 802.1w introduces the RST BPDU, keeping backwards compatibility with 802.1D frame parsers while utilizing previously reserved fields for deterministic negotiation:
+IEEE 802.1w introduces the RST BPDU while maintaining backward compatibility with 802.1D frame parsers:
 
-Protocol Version ID: Incremented to 0x02 (RSTP).
+- Protocol Version ID: Incremented to 0x02 (RSTP).
+- BPDU Type: Updated to 0x02 (Rapid / Multiple Spanning Tree).
+- Version 1 Length (1 Byte): Set to 0x00 (appended to indicate no additional protocol TLVs).
 
-BPDU Type: Updated to 0x02 (Rapid / Multiple Spanning Tree).
 
-Version 1 Length (1 Byte): Set to 0x00 (appended to indicate no additional protocol TLVs).
-
-The 802.1w Flags Byte Breakdown (Full 8-Bit Utilization):
-Instead of wasting bits, RSTP re-engineers the entire 1-byte Flags field to handle the Proposal / Agreement handshake and active role negotiation:
-
+#### The 802.1w Flags Byte Breakdown (Full 8-Bit Utilization)
+Instead of leaving bits reserved, RSTP re-engineers the entire 1-byte Flags field to handle the Proposal / Agreement handshake and active role negotiation:
 
 ```
 Bit 7      Bit 6      Bit 5      Bit 4      Bit 3      Bit 2      Bit 1      Bit 0
 +----------+----------+----------+----------+----------+----------+----------+----------+
-|   TCA    |Agreement |Forwarding| Learning |   Port Role (2 bits)| Proposal |    TC    |
+|   TCA    |Agreement |Forwarding| Learning | Port Role (2 bits)  | Proposal |    TC    |
 +----------+----------+----------+----------+----------+----------+----------+----------+
 ```
 
-Bit 7 (TCA): Topology Change Acknowledgment.
-Bit 6 (Agreement): Sent in response to a Proposal to immediately transition the designated port to Forwarding.
-Bit 5 (Forwarding): Set if the sending port is currently in the Forwarding state.
-Bit 4 (Learning): Set if the sending port is actively learning MAC addresses.
-Bits 3-2 (Port Role): Identifies the exact functional role of the transmitting port:
-00 = Unknown
-01 = Alternate / Backup Port
-10 = Root Port
-11 = Designated Port
-Bit 1 (Proposal): Transmitted by a Designated port to initiate an active synchronization handshake with the neighboring switch.
-Bit 0 (TC): Topology Change bit (RSTP handles TC locally and flushes CAM tables immediately rather than using TCN BPDUs).
+| Bit Position | Flag Name | Description |
+| :--- | :--- | :--- |
+| **Bit 7** | TCA | Topology Change Acknowledgment |
+| **Bit 6** | Agreement | Confirms Proposal to transition Designated port to Forwarding immediately |
+| **Bit 5** | Forwarding | Set when the transmitting port is in the Forwarding state |
+| **Bit 4** | Learning | Set when the transmitting port is in the Learning state |
+| **Bits 3-2** | Port Role | `00`: Unknown \| `01`: Alternate/Backup \| `10`: Root \| `11`: Designated |
+| **Bit 1** | Proposal | Initiates rapid link synchronization handshake with downstream switch |
+| **Bit 0** | TC | Topology Change flag (triggers direct MAC address table flushing and fast TC flooding) |
 
 ### 1. IEEE 802.1D Classic Configuration BPDU Header Fields
 
@@ -205,7 +197,7 @@ Bit 0 (TC): Topology Change bit (RSTP handles TC locally and flushes CAM tables 
 | **BPDU Generation** | Only Root Bridge originates; non-roots relay | Every switch originates BPDUs every Hello interval |
 | **Missing BPDU Timeout** | 20 seconds (Max Age timer expiration) | 6 seconds (3 consecutive missed Hello intervals) |
 | **Topology Change Handling** | Transmits TCN to Root; Root sets TC flag | Switch detecting change directly flushes MAC table & floods TC |
-| **Transition Mechanism** | Timer-based state transitions | Active Proposal/Agreement and rapid role transitions |
+| **Transition Mechanism** | Timer-based state transitions (Listening/Learning) | Active Proposal/Agreement and rapid role transitions |
 | **Port Roles** | Root, Designated, Non-Designated (Blocked) | Root, Designated, Alternate, Backup |
 | **Port Operational States** | Disabled, Blocking, Listening, Learning, Forwarding | Discarding, Learning, Forwarding |
 
@@ -451,7 +443,6 @@ By default, Cisco Catalyst switches run PVST+ (IEEE 802.1D). To achieve sub-seco
 ```
 configure terminal
 spanning-tree mode rapid-pvst
-txt
 end
 write memory
 ```
@@ -503,8 +494,8 @@ Gi1/0               Desg FWD 4         128.4    P2p Edge
 ### 3. Automated Root Bridge Manipulation (Root Primary & Secondary Macro)
 Cisco IOS provides dynamic macro commands to automatically adjust bridge priority without manually calculating the numerical value:
 
-- root primary: Forces the switch to become the Root Bridge. If the current root priority is greater than 24576, the switch sets its priority to 24576. If the current root priority is 24576 or lower, the switch sets its own priority to 4096 less than the current root priority.  
-- root secondary: Sets the switch priority to 28672, positioning it as the immediate backup if the primary Root Bridge fails.
+* - **root primary:** Forces the switch to become the Root Bridge. If the current root priority is greater than 24576, the switch sets its priority to 24576. If the current root priority is 24576 or lower, the switch sets its own priority to 4096 less than the current root priority.  
+* - **root secondary:** Sets the switch priority to 28672, positioning it as the immediate backup if the primary Root Bridge fails.
 
 #### Setting SW1 as Primary Root and SW2 as Secondary Root
 
@@ -565,27 +556,28 @@ write memory
 
 ### Empirical Results Comparison
 
-```
 | Metric | PVST+ (802.1D) | Rapid-PVST+ (802.1w) |
 | :--- | :--- | :--- |
 | **Observed Downtime / Failover** | ~30 - 50 seconds | ~1 - 3 seconds |
 | **Packet Loss Count** | 30+ lost ICMP packets | 1 - 2 lost ICMP packets |
 | **Transition Mechanics** | Timer-driven | Proposal / Agreement |
-```
 
 > **Note on Convergence Measurements:** The failover times and packet loss metrics listed above reflect empirical data captured within this emulated lab environment. In production networks, actual convergence times may vary depending on link speed, hardware platform processing, physical distance (propagation delay), and total network diameter.
 
 ---
 
+## Spanning Tree Toolkit (STP Security)
+
 ### Spanning Tree Toolkit: Theoretical Deep Dive
 
-The standard Spanning Tree Protocol design inherently trusts every device connected to the network topology. If any interface receives a Bridge Protocol Data Unit (BPDU), the switch processes it and dynamically shifts its roles and ports states to adapt to what it assumes is a valid network alteration. This open architecture introduces critical operational vulnerabilities: misconfigurations (such as connecting a generic consumer switch to a wall jack) or malicious activities (such as executing an STP spoofing attack) can force a complete root bridge recalculation, degrading performance or creating active bridging loops. 
+The standard Spanning Tree Protocol design inherently trusts every device connected to the network topology. If any interface receives a Bridge Protocol Data Unit (BPDU), the switch processes it and dynamically shifts its roles and port states to adapt to what it assumes is a valid network alteration. This open architecture introduces critical operational vulnerabilities: misconfigurations (such as connecting a generic consumer switch to a wall jack) or malicious activities (such as executing an STP spoofing attack) can force a complete root bridge recalculation, degrading performance or creating active bridging loops. 
 
 To mitigate these architecture risks, the Spanning Tree Toolkit offers granular, proactive security features to enforce topology boundaries and guard the active forwarding paths.
 
 ---
 
 ### 1. BPDU Guard: Enforcing the Access Layer Boundary
+
 In a well-designed hierarchical network, access layer ports configured with **PortFast** (or designated as Edge Ports in RSTP) connect exclusively to end hosts like workstations, IP phones, and printers. These end devices operate at Layer 3 and above; they do not generate or expect Layer 2 topology management frames. 
 
 **BPDU Guard** acts as an enforcement mechanism on these edge interfaces. When enabled, the switch port continues its fast-forwarding behavior, but the background processes constantly monitor the ingress queue for BPDUs. If a user connects a rogue switch, a bridging router, or runs a software-based bridge simulator on a host, a BPDU will enter the interface. 
@@ -640,13 +632,11 @@ Gi1/0           err-disabled bpduguard
 ---
 
 ### 2. BPDU Filter: Controlling BPDU Propagation
-BPDU Filter suppresses the transmission and/or reception of BPDUs on an interface. Its behavior depends on how the feature is configured.
-Global Configuration (PortFast Default): When enabled globally, BPDU Filter is associated with PortFast-enabled interfaces. The interface initially behaves as an edge port and suppresses BPDU transmission. If a BPDU is received, the interface can lose its PortFast edge behavior and participate normally in Spanning Tree.
-Interface-Level Configuration: When explicitly enabled on an interface, BPDU Filter suppresses both the transmission and reception of BPDUs on that interface. The interface therefore stops participating normally in Spanning Tree.
-* **Warning:** Interface-level BPDU Filter should be used with extreme caution. Applying it to an inter-switch link can remove STP protection from that link and allow a Layer 2 loop to form.
+While BPDU Guard disables an interface upon detecting an anomaly, BPDU Filter alters the actual transmission mechanics of the protocol. It allows administrators to stop BPDUs from leaving or entering an interface, but its operational behavior shifts drastically depending on whether it is activated globally or applied explicitly at the interface level.
 
-* **Global Configuration (PortFast Default):** When enabled globally, the feature integrates smoothly with edge behaviors. When a link state transitions to up, the interface transmits exactly 10 BPDUs to probe the segment for other switches. If no return BPDUs are detected, the port stops transmitting management frames completely, reducing unnecessary CPU utilization and link overhead. However, if a BPDU is ever received during operations, the port instantly disables BPDU Filter, strips its PortFast edge status, and returns to a traditional, fully reactive spanning-tree state.
-* **Interface-Level Configuration:** This is an explicit override that completely removes the interface from the Spanning Tree instance. The port sends zero BPDUs and silently drops any inbound BPDUs without taking any protective action (like err-disabling). **Warning:** Because this effectively blinds the switch to any downstream topology loops, using interface-level BPDU Filter on cross-connected switch links will cause a catastrophic, uncontained broadcast storm.
+* - **Global Configuration (PortFast Default):** When enabled globally, the feature integrates smoothly with edge behaviors. When a link state transitions to up, the interface transmits exactly 10 BPDUs to probe the segment for other switches. If no return BPDUs are detected, the port stops transmitting management frames completely, reducing unnecessary CPU utilization and link overhead. However, if a BPDU is ever received during operations, the port instantly disables BPDU Filter, strips its PortFast edge status, and returns to a traditional, fully reactive spanning-tree state.
+
+* - **Interface-Level Configuration:** This is an explicit override that completely removes the interface from the Spanning Tree instance. The port sends zero BPDUs and silently drops any inbound BPDUs without taking any protective action (like err-disabling). Warning: Because this effectively blinds the switch to any downstream topology loops, using interface-level BPDU Filter on cross-connected switch links will cause a catastrophic, uncontained broadcast storm.
 
 
 #### Configuration
@@ -696,10 +686,9 @@ end
 ### 3. Root Guard: Protecting the Root Bridge Authority
 The Root Bridge election is purely deterministic, dictated by the lowest Bridge ID (BID). If an administrator leaves the core switches at default priority parameters, any newly provisioned access switch or foreign device possessing a marginally lower factory MAC address will automatically usurp the Root Bridge role. This structural shift forces the entire enterprise network to reroute traffic through an inadequate, lower-capacity access device, collapsing the optimized distribution forwarding tree.
 
-**Root Guard** enforces a top-down structural hierarchy. It is deployed exclusively on downstream-facing **Designated Ports** (e.g., core-to-distribution or distribution-to-access links). Root Guard allows normal BPDU processing while the received BPDUs remain consistent with the expected Root Bridge. If a superior BPDU is received from the protected downstream interface, the port is placed into the root-inconsistent state and stops forwarding traffic.
+**Root Guard** enforces a top-down structural hierarchy. It is deployed exclusively on downstream-facing **Designated Ports** (e.g., core-to-distribution or distribution-to-access links). Root Guard allows the port to transmit and process local BPDUs normally, provided they are inferior to the current Root Bridge.
 
-If a downstream device transmits a *superior BPDU* (claiming a better priority or lower MAC address), Root Guard refuses to relay the configuration frame or accept the new root identity. Instead, it instantly places the local interface into a **`root-inconsistent`** state. This specialized state acts as a structural block: it halts the forwarding of user data frames and drops incoming control packets, completely isolating the rogue superior switch. Unlike BPDU Guard, Root Guard does not down the link; it continuously listens. The moment the downstream device stops advertising the superior path, the port automatically moves through standard convergence states back into Forwarding.
-
+If a downstream device transmits a superior BPDU (claiming a better priority or lower MAC address), Root Guard refuses to relay the configuration frame or accept the new root identity. Instead, it instantly places the local interface into a **'root-inconsistent'** state. This specialized state acts as a structural block: it halts the forwarding of user data frames and drops incoming control packets, completely isolating the rogue superior switch. Unlike BPDU Guard, Root Guard does not down the link; it continuously listens. The moment the downstream device stops advertising the superior path, the port automatically moves through standard convergence states back into Forwarding.
 
 #### Configuration (Applied per interface on Designated Ports)
 ```
@@ -720,6 +709,7 @@ SW1# show spanning-tree inconsistentports
 
 Number of inconsistent ports (segments) in the system : 1
 ```
+
 ```
 SW1# show spanning-tree interface GigabitEthernet 0/1 detail
  Port 2 (GigabitEthernet0/1) of VLAN0001 is Designated Root-Inconsistent
@@ -735,11 +725,11 @@ SW1# show spanning-tree interface GigabitEthernet 0/1 detail
 ---
 
 ### 4. Loop Guard: Mitigating Unidirectional Failures
-Modern networks rely heavily on fiber-optic links and high-speed transceivers. These links can suffer from a structural failure known as a *unidirectional link condition*, where the physical path breaks in one direction (e.g., RX breaks while TX remains functional). If a blocking/alternate port on a downstream switch stops receiving periodic BPDUs due to a unilateral fiber cut upstream, it assumes the link is free of loops. Once its Max Age timer expires, it transitions through Listening and Learning directly into a Designated Forwarding state. Because the reverse path is still physically open, this creates an active, silent Layer 2 loop.
+Modern networks rely heavily on fiber-optic links and high-speed transceivers. These links can suffer from a structural failure known as a unidirectional link condition, where the physical path breaks in one direction (e.g., RX breaks while TX remains functional). If a blocking/alternate port on a downstream switch stops receiving periodic BPDUs due to a unilateral fiber cut upstream, it assumes the link is free of loops. Once its Max Age timer expires, it transitions through Listening and Learning directly into a Designated Forwarding state. Because the reverse path is still physically open, this creates an active, silent Layer 2 loop.
 
-**Loop Guard** Loop Guard addresses this by monitoring interfaces that are expected to receive BPDUs, such as **Root Ports** and **Alternate Ports**.
+**Loop Guard** addresses this by tracking the continuous arrival of BPDUs on non-designating interfaces (**Root Ports** and **Alternate Ports**). It introduces a state check: if BPDUs disappear on a monitored port without a corresponding link-down notification, Loop Guard prevents the interface from transitioning to a forwarding role.
 
-Instead of moving toward a Designated status, the switch isolates the port by placing it into a **`loop-inconsistent`** state. This state completely blocks Layer 2 traffic forwarding on that interface, ensuring a unidirectional link failure cannot break the active loop-free logical path. Like Root Guard, this feature features automated recovery: the moment a valid, periodic BPDU is successfully received on the interface again, the inconsistency flag clears, and the port returns to normal operation.
+Instead of moving toward a Designated status, the switch isolates the port by placing it into a **'loop-inconsistent'** state. This state completely blocks Layer 2 traffic forwarding on that interface, ensuring a unidirectional link failure cannot break the active loop-free logical path. Like Root Guard, this feature features automated recovery: the moment a valid, periodic BPDU is successfully received on the interface again, the inconsistency flag clears, and the port returns to normal operation.
 
 #### Configuration
 Global Configuration (Recommended for all non-edge point-to-point links)
@@ -827,7 +817,7 @@ SW1# show spanning-tree vlan 20 | include protocol
 Loop Guard prevents bridging loops caused by unidirectional link failures by keeping an alternate or root port blocked when periodic BPDUs disappear.
 
 #### Operational Impact
-If an administrator incorrectly enables Loop Guard on a Designated Port that naturally transmits BPDUs rather than receiving them, the configuration remains inactive[cite: 773]. Conversely, if legitimate network congestion or high control-plane CPU utilization drops or delays three consecutive inbound BPDUs on a valid Root Port, Loop Guard triggers a false positive, locking the interface into a `loop-inconsistent` state and breaking valid backup paths[cite: 774].
+If an administrator incorrectly enables Loop Guard on a Designated Port that naturally transmits BPDUs rather than receiving them, the configuration remains inactive. Conversely, if legitimate network congestion or high control-plane CPU utilization drops or delays three consecutive inbound BPDUs on a valid Root Port, Loop Guard triggers a false positive, locking the interface into a `loop-inconsistent` state and breaking valid backup paths.
 
 #### Commands & Verification
 
