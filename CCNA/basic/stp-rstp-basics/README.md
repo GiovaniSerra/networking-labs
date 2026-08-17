@@ -88,6 +88,7 @@ RSTP achieves sub-second convergence primarily through the explicit **Proposal/A
 | **SW2** | Gi1/0 | **VPCS5** | eth0 | Access (VLAN 1) |
 | **SW3** | Gi0/1 | **SW4** | Gi0/0 | Trunk (802.1Q) |
 | **SW4** | Gi1/0 | **VPCS6** | eth0 | Access (VLAN 1) |
+
 ---
 
 ## Deep Dive: BPDU Frame Structure & Header Evolution
@@ -548,8 +549,71 @@ end
 write memory
 ```
 
----
+### 4. Tuning Spanning Tree Timers (Hello Time, Forward Delay & Max Age)
+Spanning Tree timers control the transmission frequency of BPDUs and the transition intervals between port states. By default, IEEE 802.1D / PVST+ uses the following baseline timers:
 
+* - **Hello Time:** 2 seconds (the periodic interval at which the Root Bridge generates Configuration BPDUs).
+* - **Forward Delay:** 15 seconds (the time spent in both the Listening and Learning states before reaching Forwarding).
+* - **Max Age:** 20 seconds (the maximum duration a switch stores BPDU information before discarding it due to inactivity).
+
+#### Operational Rules and Scope
+Configured Strictly on the Root Bridge: Spanning Tree timers must be altered only on the active Root Bridge. Non-root switches dynamically inherit and enforce the operational timers advertised within the Root Bridge's BPDUs to maintain domain-wide consistency.
+
+Network Diameter Impact: Manually changing individual timer parameters can lead to transient bridging loops or false-positive topology recalculations in large networks. Cisco strongly recommends tuning timers using the automated diameter macro instead of setting manual values.
+
+#### Method 1: Recommended Diameter-Based Tuning (Cisco Best Practice)
+The diameter macro automatically recalculates and applies optimized Hello Time, Forward Delay, and Max Age values based on the maximum number of switch hops between any two endpoints (default network diameter is 7):
+
+```
+SW1(config)# spanning-tree vlan 1 root primary diameter 4
+```
+
+#### Method 2: Manual Per-VLAN Timer Configuration
+If specific custom timer values are strictly required, configure them directly on the designated Root Bridge:
+
+```
+SW1# configure terminal
+SW1(config)# spanning-tree vlan 1 hello-time 1
+SW1(config)# spanning-tree vlan 1 forward-time 10
+SW1(config)# spanning-tree vlan 1 max-age 14
+SW1(config)# end
+SW1# write memory
+```
+
+##### Valid Cisco IOS configurable ranges:
+* - **hello-time:** 1 to 10 seconds
+* - **forward-time:** 4 to 30 seconds
+* - **max-age:** 6 to 40 seconds
+ 
+### Verification Commands
+To confirm that the custom timers are active on the Root Bridge and propagated throughout the Layer 2 domain:
+
+```
+SW1# show spanning-tree vlan 1
+VLAN0001
+  Spanning tree enabled protocol ieee
+  Root ID    Priority    24577
+             Address     5000.0001.0000
+             This bridge is the root
+             Hello Time   1 sec  Max Age 14 sec  Forward Delay 10 sec
+
+  Bridge ID  Priority    24577  (priority 24576 sys-id-ext 1)
+             Address     5000.0001.0000
+             Hello Time   1 sec  Max Age 14 sec  Forward Delay 10 sec
+             Aging Time  300 sec
+```
+
+On downstream non-root switches (such as SW2), verify that the Root ID section reflects the updated timers received via upstream BPDUs, while the local Bridge ID section retains default values until that switch becomes the root:
+
+```
+SW2# show spanning-tree vlan 1 | include (Root ID|Bridge ID|Hello Time)
+  Root ID    Priority    24577
+             Hello Time   1 sec  Max Age 14 sec  Forward Delay 10 sec
+  Bridge ID  Priority    32769
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+```
+
+---
 
 ### Empirical Results Comparison
 
