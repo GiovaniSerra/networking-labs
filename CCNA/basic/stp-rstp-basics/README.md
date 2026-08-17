@@ -797,7 +797,7 @@ RSTP features backward compatibility by falling back to 802.1D mechanics on inte
 To detect an active protocol fallback on an interface, inspect the spanning-tree link type output.
 
 ```
-SW1# show spanning-tree vlan 1 interface GigabitEthernet 0/1
+SW1# show spanning-tree vlan 1 interface GigabitEthernet 0/0
 Interface           Role Sts Cost      Prio.Nbr Type
 ------------------- ---- --- --------- -------- --------------------------------
 Gi0/0               Root FWD 4         128.1    P2p Peer(STP)
@@ -823,11 +823,11 @@ SW1# show spanning-tree vlan 20 | include protocol
 ```
 * **Note: protocol ieee indicates standard 802.1D (PVST+), whereas protocol rstp confirms the execution of 802.1w (Rapid-PVST+).**
 
-#### Misconfigurations & Issues with Loop Guard
+#### 3. Misconfigurations & Issues with Loop Guard
 Loop Guard prevents bridging loops caused by unidirectional link failures by keeping an alternate or root port blocked when periodic BPDUs disappear.
 
 #### Operational Impact
-If an administrator incorrectly enables Loop Guard on a Designated Port that naturally transmits BPDUs rather than receiving them, the configuration remains inactive. Conversely, if legitimate network congestion or high control-plane CPU utilization drops or delays three consecutive inbound BPDUs on a valid Root Port, Loop Guard triggers a false positive, locking the interface into a **loop-inconsistent** state and breaking valid backup paths.
+If an administrator incorrectly enables Loop Guard on a Designated Port that naturally transmits BPDUs rather than receiving them, the configuration remains inactive[cite: 773]. Conversely, if legitimate network congestion or high control-plane CPU utilization drops or delays three consecutive inbound BPDUs on a valid Root Port, Loop Guard triggers a false positive, locking the interface into a `loop-inconsistent` state and breaking valid backup paths[cite: 774].
 
 #### Commands & Verification
 
@@ -838,6 +838,7 @@ SW2# show spanning-tree inconsistentports
    -------------------- ---------------------- ------------------
    VLAN0001             GigabitEthernet0/0     Loop Inconsistent
 ```
+* **Note:** Once the upstream neighbor recovers control-plane stability and resumes transmitting periodic, valid BPDUs, Loop Guard automatically restores the port to its normal STP operational state without requiring manual intervention.
 
 To clear an interface blocked by a false positive once the upstream neighbor recovers control-plane stability, issue the protocol reset command:
 ```
@@ -911,7 +912,7 @@ write memory
 ### 7. Other Common Spanning Tree Failures
 
 #### Duplex Mismatch Creating False Forwards
-A duplex mismatch between interconnected switches can cause severe Layer 2 performance problems, including collisions, late collisions, errors, and packet loss. Because the affected link may remain operational at the physical layer, the resulting symptoms can be difficult to diagnose.
+When one side of an inter-switch trunk is hardcoded to Full-Duplex and the other side defaults to Half-Duplex, the half-duplex side uses Carrier Sense Multiple Access with Collision Detection (CSMA/CD) to listen before transmitting. If the full-duplex side transmits data continuously, the half-duplex switch experiences constant collisions and fails to receive inbound BPDUs. Its Max Age timer eventually expires, causing it to incorrectly transition its alternate port into a Designated Forwarding state, creating a devastating data loop.
 
 Duplex mismatches can also interfere with BPDU delivery and STP operation. Therefore, both ends of an inter-switch link should use compatible speed and duplex settings, preferably through consistent auto-negotiation or explicit matching configuration.
 
