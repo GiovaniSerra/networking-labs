@@ -44,7 +44,7 @@ The Spanning Tree Protocol constructs a logical loop-free tree topology by strat
 
 #### IEEE 802.1D Port States & Timers
 
-Classic STP relies on timer-based state transitions to safely reconverge without creating temporary Layer 2 loops, resulting in relatively slow convergence. Under **classic IEEE 802.1D Spanning Tree**, the worst-case convergence time can reach approximately 50 seconds with default timers: **Max Age (20s)** may be required for stale BPDU information to expire, followed by **Listening (15s)** and **Learning (15s)** before the port reaches the Forwarding state.
+Classic STP relies on timer-based state transitions to safely reconverge without creating temporary Layer 2 loops, resulting in relatively slow convergence. Under classic IEEE 802.1D Spanning Tree, worst-case convergence can reach approximately 50 seconds with default timers: **Max Age (20s)** may be required for stale BPDU information to expire, followed by **Listening (15s)** and **Learning (15s)** before the port reaches the Forwarding state.
 
 | Port State | Function | Timer |
 | :--- | :--- | :--- |
@@ -205,7 +205,7 @@ Bit 0 (TC): Topology Change bit (RSTP handles TC locally and flushes CAM tables 
 | **BPDU Generation** | Only Root Bridge originates; non-roots relay | Every switch originates BPDUs every Hello interval |
 | **Missing BPDU Timeout** | 20 seconds (Max Age timer expiration) | 6 seconds (3 consecutive missed Hello intervals) |
 | **Topology Change Handling** | Transmits TCN to Root; Root sets TC flag | Switch detecting change directly flushes MAC table & floods TC |
-| **Transition Mechanism** | Passive timers (`30 - 50 seconds`) | Active Proposal/Agreement handshake (`< 1 second`) |
+| **Transition Mechanism** | Timer-based state transitions | Active Proposal/Agreement and rapid role transitions |
 | **Port Roles** | Root, Designated, Non-Designated (Blocked) | Root, Designated, Alternate, Backup |
 | **Port Operational States** | Disabled, Blocking, Listening, Learning, Forwarding | Discarding, Learning, Forwarding |
 
@@ -640,7 +640,10 @@ Gi1/0           err-disabled bpduguard
 ---
 
 ### 2. BPDU Filter: Controlling BPDU Propagation
-While BPDU Guard disables an interface upon detecting an anomaly, **BPDU Filter** alters the actual transmission mechanics of the protocol. It allows administrators to stop BPDUs from leaving or entering an interface, but its operational behavior shifts drastically depending on whether it is activated globally or applied explicitly at the interface level.
+BPDU Filter suppresses the transmission and/or reception of BPDUs on an interface. Its behavior depends on how the feature is configured.
+Global Configuration (PortFast Default): When enabled globally, BPDU Filter is associated with PortFast-enabled interfaces. The interface initially behaves as an edge port and suppresses BPDU transmission. If a BPDU is received, the interface can lose its PortFast edge behavior and participate normally in Spanning Tree.
+Interface-Level Configuration: When explicitly enabled on an interface, BPDU Filter suppresses both the transmission and reception of BPDUs on that interface. The interface therefore stops participating normally in Spanning Tree.
+* **Warning:** Interface-level BPDU Filter should be used with extreme caution. Applying it to an inter-switch link can remove STP protection from that link and allow a Layer 2 loop to form.
 
 * **Global Configuration (PortFast Default):** When enabled globally, the feature integrates smoothly with edge behaviors. When a link state transitions to up, the interface transmits exactly 10 BPDUs to probe the segment for other switches. If no return BPDUs are detected, the port stops transmitting management frames completely, reducing unnecessary CPU utilization and link overhead. However, if a BPDU is ever received during operations, the port instantly disables BPDU Filter, strips its PortFast edge status, and returns to a traditional, fully reactive spanning-tree state.
 * **Interface-Level Configuration:** This is an explicit override that completely removes the interface from the Spanning Tree instance. The port sends zero BPDUs and silently drops any inbound BPDUs without taking any protective action (like err-disabling). **Warning:** Because this effectively blinds the switch to any downstream topology loops, using interface-level BPDU Filter on cross-connected switch links will cause a catastrophic, uncontained broadcast storm.
@@ -693,7 +696,7 @@ end
 ### 3. Root Guard: Protecting the Root Bridge Authority
 The Root Bridge election is purely deterministic, dictated by the lowest Bridge ID (BID). If an administrator leaves the core switches at default priority parameters, any newly provisioned access switch or foreign device possessing a marginally lower factory MAC address will automatically usurp the Root Bridge role. This structural shift forces the entire enterprise network to reroute traffic through an inadequate, lower-capacity access device, collapsing the optimized distribution forwarding tree.
 
-**Root Guard** enforces a top-down structural hierarchy. It is deployed exclusively on downstream-facing **Designated Ports** (e.g., core-to-distribution or distribution-to-access links). Root Guard allows the port to transmit and process local BPDUs normally, provided they are inferior to the current Root Bridge. 
+**Root Guard** enforces a top-down structural hierarchy. It is deployed exclusively on downstream-facing **Designated Ports** (e.g., core-to-distribution or distribution-to-access links). Root Guard allows normal BPDU processing while the received BPDUs remain consistent with the expected Root Bridge. If a superior BPDU is received from the protected downstream interface, the port is placed into the root-inconsistent state and stops forwarding traffic.
 
 If a downstream device transmits a *superior BPDU* (claiming a better priority or lower MAC address), Root Guard refuses to relay the configuration frame or accept the new root identity. Instead, it instantly places the local interface into a **`root-inconsistent`** state. This specialized state acts as a structural block: it halts the forwarding of user data frames and drops incoming control packets, completely isolating the rogue superior switch. Unlike BPDU Guard, Root Guard does not down the link; it continuously listens. The moment the downstream device stops advertising the superior path, the port automatically moves through standard convergence states back into Forwarding.
 
@@ -734,7 +737,7 @@ SW1# show spanning-tree interface GigabitEthernet 0/1 detail
 ### 4. Loop Guard: Mitigating Unidirectional Failures
 Modern networks rely heavily on fiber-optic links and high-speed transceivers. These links can suffer from a structural failure known as a *unidirectional link condition*, where the physical path breaks in one direction (e.g., RX breaks while TX remains functional). If a blocking/alternate port on a downstream switch stops receiving periodic BPDUs due to a unilateral fiber cut upstream, it assumes the link is free of loops. Once its Max Age timer expires, it transitions through Listening and Learning directly into a Designated Forwarding state. Because the reverse path is still physically open, this creates an active, silent Layer 2 loop.
 
-**Loop Guard** addresses this by tracking the continuous arrival of BPDUs on non-designating interfaces (**Root Ports** and **Alternate Ports**). It introduces a state check: if BPDUs disappear on a monitored port without a corresponding link-down notification, Loop Guard prevents the interface from transitioning to a forwarding role. 
+**Loop Guard** Loop Guard addresses this by monitoring interfaces that are expected to receive BPDUs, such as **Root Ports** and **Alternate Ports**.
 
 Instead of moving toward a Designated status, the switch isolates the port by placing it into a **`loop-inconsistent`** state. This state completely blocks Layer 2 traffic forwarding on that interface, ensuring a unidirectional link failure cannot break the active loop-free logical path. Like Root Guard, this feature features automated recovery: the moment a valid, periodic BPDU is successfully received on the interface again, the inconsistency flag clears, and the port returns to normal operation.
 
@@ -788,7 +791,7 @@ Number of inconsistent ports (segments) in the system : 1
 When one switch in the topology runs legacy STP (or standard PVST+) while the remaining switches run RSTP (or Rapid-PVST+), the protocol boundary defaults to backward compatibility mode. 
 
 #### Operational Impact
-RSTP features backward compatibility by falling back to 802.1D mechanics on interfaces where legacy BPDUs are detected. The specific interface drops the fast Proposal/Agreement handshake and falls back to standard timer-based transitions (Listening and Learning), causing a **30-second convergence delay** on that segment during a failover.
+RSTP features backward compatibility by falling back to 802.1D mechanics on interfaces where legacy BPDUs are detected. The affected interface falls back to 802.1D-compatible behavior and no longer uses the full RSTP Proposal/Agreement mechanism. As a result, convergence on that segment can become significantly slower and may follow the legacy Listening and Learning timer sequence.
 
 #### Commands & Verification
 To detect an active protocol fallback on an interface, inspect the spanning-tree link type output.
@@ -908,7 +911,9 @@ write memory
 ### 7. Other Common Spanning Tree Failures
 
 #### Duplex Mismatch Creating False Forwards
-When one side of an inter-switch trunk is hardcoded to Full-Duplex and the other side defaults to Half-Duplex, the half-duplex side uses Carrier Sense Multiple Access with Collision Detection (CSMA/CD) to listen before transmitting. If the full-duplex side transmits data continuously, the half-duplex switch experiences constant collisions and fails to receive inbound BPDUs. Its Max Age timer eventually expires, causing it to incorrectly transition its alternate port into a Designated Forwarding state, creating a devastating data loop.
+A duplex mismatch between interconnected switches can cause severe Layer 2 performance problems, including collisions, late collisions, errors, and packet loss. Because the affected link may remain operational at the physical layer, the resulting symptoms can be difficult to diagnose.
+
+Duplex mismatches can also interfere with BPDU delivery and STP operation. Therefore, both ends of an inter-switch link should use compatible speed and duplex settings, preferably through consistent auto-negotiation or explicit matching configuration.
 
 #### EtherChannel Misconfigurations
 If a bundle of physical links is cross-connected between two switches without an active aggregation protocol (such as LACP or PAGP), Spanning Tree treats each physical link as an independent operational path. Because the links are physically bundled on one side but unaggregated on the control plane, BPDUs loop back into adjacent links of the same switch, resulting in severe MAC table flapping and constant topology alterations.
