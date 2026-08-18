@@ -484,13 +484,13 @@ write memory
 SW1# show spanning-tree summary
 Switch is in rapid-pvst mode
 Root bridge for: VLAN0001
-Extended system ID           is enabled
-Portfast Default             is disabled
-Portfast Edge BPDU Guard Default is disabled
-Portfast Edge BPDU Filter Default is disabled
-Loopguard Default            is disabled
-PVST Simulation              is enabled
-Etherchannel misconfig guard is enabled
+Extended system ID                    is enabled
+Portfast Default                      is disabled
+Portfast Edge BPDU Guard Default      is disabled
+Portfast Edge BPDU Filter Default     is disabled
+Loopguard Default                     is disabled
+PVST Simulation                       is enabled
+Etherchannel misconfig guard          is enabled
 ```
 ---
 #### Verification on SW2
@@ -708,13 +708,13 @@ write memory
 SW1# show spanning-tree summary
 Switch is in rapid-pvst mode
 Root bridge for: VLAN0001
-Extended system ID           is enabled
-Portfast Default             is enabled
-Portfast Edge BPDU Guard Default is enabled
-Portfast Edge BPDU Filter Default is disabled
-Loopguard Default            is disabled
-PVST Simulation              is enabled
-Etherchannel misconfig guard is enabled
+Extended system ID                    is enabled
+Portfast Default                      is enabled
+Portfast Edge BPDU Guard Default      is enabled
+Portfast Edge BPDU Filter Default     is disabled
+Loopguard Default                     is disabled
+PVST Simulation                       is enabled
+Etherchannel misconfig guard          is enabled
 ```
 
 ```
@@ -856,13 +856,13 @@ write memory
 SW2# show spanning-tree summary
 Switch is in rapid-pvst mode
 Root bridge for: none
-Extended system ID           is enabled
-Portfast Default             is disabled
-Portfast Edge BPDU Guard Default is disabled
-Portfast Edge BPDU Filter Default is disabled
-Loopguard Default            is enabled
-PVST Simulation              is enabled
-Etherchannel misconfig guard is enabled
+Extended system ID                 is enabled
+Portfast Default                   is disabled
+Portfast Edge BPDU Guard Default   is disabled
+Portfast Edge BPDU Filter Default  is disabled
+Loopguard Default                  is enabled
+PVST Simulation                    is enabled
+Etherchannel misconfig guard       is enabled
 ```
 
 ```
