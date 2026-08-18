@@ -204,6 +204,34 @@ Bit 7      Bit 6      Bit 5      Bit 4      Bit 3      Bit 2      Bit 1      Bit
 
 ---
 
+### Topology Change Mechanisms: IEEE 802.1D vs. IEEE 802.1w
+
+When a network link changes state (up or down), switches must invalidate stale MAC address table entries to prevent frame misdirection or blackholing. The operational flow for signaling topology changes differs fundamentally between legacy 802.1D and RSTP (802.1w).
+
+#### 1. Legacy IEEE 802.1D Topology Change Process (TCN & TCA)
+
+In classic STP, non-root switches cannot broadcast topology change events directly to the network. Instead, they rely on a multi-stage notification and acknowledgment process:
+
+1. **Topology Change Detection:** When a non-root switch detects a link state transition (e.g., an interface transitions to Forwarding or Blocking), it generates a specialized **Topology Change Notification (TCN) BPDU** (BPDU Type `0x80`, containing only 4 bytes with no topology data).
+2. **Upstream Relay (TCN):** The switch transmits the TCN BPDU out of its Root Port toward the Root Bridge at every Hello interval until acknowledged.
+3. **Upstream Acknowledgment (TCA):** The immediate upstream neighbor receives the TCN, sets the **Topology Change Acknowledgment (TCA)** flag (Bit 7) in its next transmitted Configuration BPDU, and sends it back to stop the downstream switch from sending further TCNs.
+4. **Relay to Root:** The upstream switch then generates its own TCN and sends it upstream toward the Root Bridge. This hop-by-hop relay continues until the TCN reaches the Root Bridge.
+5. **Domain-Wide Flooding (TC):** Once the Root Bridge receives the TCN, it sets the **Topology Change (TC)** flag (Bit 0) in its periodic Configuration BPDUs. It floods these BPDUs throughout the entire Layer 2 domain for a duration equal to `Max Age + Forward Delay` (35 seconds by default).
+6. **MAC Aging Reduction:** Downstream switches receiving BPDUs with the TC bit set temporarily reduce their CAM/MAC table aging timer from the default 300 seconds down to the **Forward Delay** timer (15 seconds), quickly flushing stale host mappings.
+
+---
+
+#### 2. IEEE 802.1w (RSTP) Direct Topology Change Flooding
+
+RSTP completely eliminates the slow, multi-hop TCN/TCA mechanism to achieve immediate MAC table synchronization:
+
+1. **Edge Port Immunity:** Transitions on edge ports (PortFast-enabled interfaces connected to end hosts) do **not** generate topology change events.
+2. **Direct Flooding:** The moment a non-edge port transitions to the Forwarding state, the detecting switch immediately generates a standard RST BPDU with the **TC flag (Bit 0)** set and floods it out of all non-edge Designated Ports and Root Ports.
+3. **Direct MAC Flushing:** Instead of passively reducing the aging timer to 15 seconds, switches receiving a TC-flagged BPDU instantly flush all dynamic MAC addresses learned on all non-edge ports (except the port on which the TC was received).
+4. **TC While Timer:** The switch continues flooding TC BPDUs for a period of `tcWhile` (defined as `2 × Hello Time` = 4 seconds) to ensure that the entire Layer 2 domain synchronizes instantly.
+
+---
+
 ## Configuration Guide
 
 ### 1. Initial Configuration
