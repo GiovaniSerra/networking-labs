@@ -70,6 +70,16 @@ RSTP achieves sub-second convergence primarily through the explicit **Proposal/A
 | **Learning** | Learning | Populates MAC table, drops data |
 | **Forwarding** | Forwarding | Active data transmission |
 
+#### RSTP Port Roles Definition
+
+IEEE 802.1w redefines Spanning Tree port roles into four explicit operational assignments:
+
+* **Root Port (RP):** The single interface on a non-root switch that provides the lowest-cost path toward the Root Bridge. It forwards data traffic.
+* **Designated Port (DP):** The interface elected per network segment/collision domain that forwards traffic toward that segment and advertises BPDUs.
+* **Alternate Port (AP):** An interface providing an alternative/backup path toward the Root Bridge through a different switch (evaluates upstream Sender Bridge IDs). If the current Root Port fails, the Alternate Port immediately takes over as the new Root Port.
+* **Backup Port (BP):** An interface providing redundant connectivity to the same shared segment/switch (where a single switch has multiple ports connected to the same hub or collision domain). It receives superior BPDUs originating from another interface on the exact same local switch and remains discarded to prevent local loop formation.
+* **Disabled Port:** An interface administratively shut down or not actively participating in Spanning Tree calculations.
+
 ---
 
 ## Topology Architecture
