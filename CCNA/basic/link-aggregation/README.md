@@ -65,7 +65,7 @@ Link Aggregation bundles up to **8 active physical links** (and up to 8 addition
 ### Host Access Ports
 
 | Device | Interface | Connected Host | Mode | VLAN |
-| :---: | :---: | :---: | :---: | :---: |
+| :--- | :--- | :--- | :--- | :--- |
 | **SW-ACCESS-01** | `Gi1/2` | VPC1 (`eth0`) | Access | VLAN 10 |
 | **SW-ACCESS-02** | `Gi1/2` | VPC2 (`eth0`) | Access | VLAN 20 |
 
@@ -156,9 +156,6 @@ Group  Port-channel  Protocol  Ports
 * **Po1 (SU):** S (Layer 2), U (In use) with member ports Et0/0 and Et0/1 flagged as P (bundled in port-channel).
 * **Po3 (RU):** R (Layer 3), U (In use) with member ports Et0/2 and Et0/3 bundled.
 
-![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/show%20summ%20%2B%20run%20int.png)
-
-
 ---
 
 ## Deep Dive: LACP Packet Dissection (Wireshark)
@@ -239,9 +236,10 @@ Po1              Root FWD 3         128.65   P2p
 
 ## Summary of Findings
 
-LACP Stability: Full convergence requires at least one active peer (active + active or active + passive).
-Layer 3 Bundling: Applying no switchport on member ports allows native IP assignment and routed forwarding across the Port-Channel.
-Traffic Integrity: Hash algorithms determine link distribution across member ports based on frame headers without packet reordering.
+* **LACP Negotiation & Stability:** Full convergence requires at least one active peer (`active` + `active` or `active` + `passive`). Mismatched static configurations (`on` vs. `active`) trigger immediate port suspension to prevent forwarding loops.
+* **Layer 3 Routed Bundling:** Applying `no switchport` across physical members and the logical Port-Channel allows native IP assignment and point-to-point Layer 3 transit without Spanning Tree overhead.
+* **Spanning Tree Optimization:** STP detects the aggregated Port-Channel as a single logical interface with reduced path cost, blocking redundant topology paths at the bundle level rather than per-physical link.
+* **Traffic Distribution:** Global load-balancing hash algorithms distribute traffic across member links based on packet headers (MAC/IP) without causing out-of-order packet delivery.
 
 ---
 
