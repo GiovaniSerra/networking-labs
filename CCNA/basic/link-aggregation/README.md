@@ -3,6 +3,48 @@
 ## Overview
 This lab demonstrates the implementation, verification, and packet-level analysis of Link Aggregation Groups (LAG / EtherChannel) operating across Layer 2 and Layer 3 boundaries. The topology implements standard IEEE 802.3ad (LACP), Cisco PAgP, static link bundling, load-balancing hash algorithms, and interaction with the Spanning Tree Protocol (STP).
 
+## Why Use Link Aggregation? (Problem & Solution)
+
+### The Problem in Traditional Campus Networks
+In standard switched topologies, connecting multiple physical links between two switches creates Layer 2 switching loops. To prevent broadcast storms, MAC address table instability, and multiple frame transmission, the **Spanning Tree Protocol (STP)** detects the redundant loop and transitions all extra links into a **blocking (discarding)** state.
+
+As a result:
+* **Bandwidth Underutilization:** Redundant physical cables remain idle, wasting available throughput (e.g., in a dual 1 Gbps uplink setup, only 1 Gbps is usable while the other link sits in standby).
+* **Slow Failover / STP Re-convergence:** When an active link fails, STP must recalculate the topology, which can cause brief packet loss and temporary network disruption during state transitions.
+
+---
+
+### The Solution: Link Aggregation (EtherChannel / LAG)
+Link Aggregation bundles up to **8 active physical links** (and up to 8 additional standby links with LACP) into a single **logical interface** called a **Port-Channel**.
+
+* **Aggregated Bandwidth:** Combines the throughput of all member links into a single high-speed pipe (e.g., 2x 1 Gbps links = 2 Gbps aggregated logical capacity).
+* **Seamless Redundancy & Fast Failover:** If an individual physical interface fails, traffic is immediately redistributed across the remaining active links in the bundle without triggering an STP recalculation or link-state convergence delay.
+* **STP Optimization:** STP sees the entire bundle as **one single logical port**, allowing all physical cables to forward traffic simultaneously without being blocked.
+* **Deterministic Load Balancing:** Distributes outbound frames across physical links based on mathematical hash algorithms (Layer 2 MAC, Layer 3 IP, or Layer 4 Port headers).
+
+---
+
+### Link Aggregation Types & Protocols Comparison
+
+| Feature / Metric | LACP (Link Aggregation Control Protocol) | PAgP (Port Aggregation Protocol) | Static EtherChannel (`mode on`) |
+| :--- | :--- | :--- | :--- |
+| **Standard** | **IEEE 802.3ad / IEEE 802.1AX** (Open Standard) | **Cisco Proprietary** | Non-standard / Manual |
+| **Vendor Support** | Multi-vendor (Cisco, Juniper, Arista, Linux, etc.) | Cisco devices only | Most managed enterprise switches |
+| **Operational Modes** | `active` / `passive` | `desirable` / `auto` | `on` |
+| **Automatic Negotiation** | Yes (exchanges LACPDUs via `01:80:c2:00:00:02`) | Yes (exchanges PAgP packets via `01:00:0c:cc:cc:cc`) | No (forces links directly into bundle) |
+| **Misconfiguration Protection** | **High** (suspends ports on parameter/speed mismatch) | **High** (suspends ports on mismatch) | **Low** (can cause loops or blackholes if mismatched) |
+| **Maximum Active Links** | Up to **8 active** + 8 standby (hot-standby support) | Up to **8 active** (no hot-standby) | Up to **8 active** |
+| **Industry Recommendation** | **Standard Best Practice for all modern designs** | Legacy / Cisco-only environments | Deprecated / Specialized host clustering |
+
+---
+
+### Layer 2 vs. Layer 3 EtherChannel
+
+* **Layer 2 EtherChannel:** Bundles switch access or trunk ports together. Carries VLAN tagged traffic (`dot1q`) across campus distribution/access layers, operating under Layer 2 MAC forwarding rules.
+* **Layer 3 (Routed) EtherChannel:** Configured by disabling switchport mode (`no switchport`) on member interfaces and assigning an IP address directly to the logical `Port-channel` interface. Eliminates Layer 2 Spanning Tree entirely on the link, acting as a high-bandwidth point-to-point routed transit connection for dynamic routing protocols (OSPF, EIGRP, BGP).
+
+---
+
 ## Topology
 
 ![Topology](./images/topo.png)
@@ -17,6 +59,8 @@ This lab demonstrates the implementation, verification, and packet-level analysi
 | **Po4** | SW-CORE-01 | `Et1/2`, `Et1/3` | SW-ACCESS-02 | `Gi0/2`, `Gi0/3` | Layer 2 Trunk | LACP (`active` / `passive`) | Redundant Cross-Link - Core 01 to Access 02 |
 | **Po5** | SW-CORE-02 | `Et1/2`, `Et1/3` | SW-ACCESS-01 | `Gi0/2`, `Gi0/3` | Layer 2 Trunk | LACP (`active` / `passive`) | Redundant Cross-Link - Core 02 to Access 01 |
 | **Po6** | SW-CORE-02 | `Et0/0`, `Et0/1` | SW-ACCESS-02 | `Gi0/0`, `Gi0/1` | Layer 2 Trunk | LACP (`active` / `passive`) | Primary Uplink - Core 02 to Access 02 |
+
+---
 
 ### Host Access Ports
 
@@ -49,6 +93,7 @@ interface range GigabitEthernet0/0 - 1
  no shutdown
 exit
 ```
+
 SW-ACCESS-02 (L2 Access Switch)
 ```
 ! Access peer-link to SW-ACCESS-01
@@ -83,6 +128,7 @@ interface Port-channel 3
  no shutdown
 exit
 ```
+
 ---
 
 ## Verification & State Inspection
@@ -123,11 +169,6 @@ Group  Port-channel  Protocol  Ports
 
 ![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/wireshark%20-%20lacp%20ac%20s.png)
 
-![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/wiresh%20-%20lb%201.png)
-
-![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/wiresh%20-%20lb%201.png)
-
-
 Frame captures highlight the structure of IEEE 802.3ad control packets:
 
 * Multicast Destination: 01:80:c2:00:00:02 (Slow Protocols Multicast MAC, EtherType 0x8809, Subtype 0x01).
@@ -166,6 +207,8 @@ EtherChannel Load-Balancing Configuration:
         src-ip
 ```
 
+---
+
 ### Spanning Tree Protocol (STP) Integration
 The Spanning Tree Protocol treats each bundle as a single point-to-point link:
 
@@ -199,4 +242,17 @@ Po1              Root FWD 3         128.65   P2p
 LACP Stability: Full convergence requires at least one active peer (active + active or active + passive).
 Layer 3 Bundling: Applying no switchport on member ports allows native IP assignment and routed forwarding across the Port-Channel.
 Traffic Integrity: Hash algorithms determine link distribution across member ports based on frame headers without packet reordering.
+
+---
+
+## Standards & Official References
+
+* **IEEE 802.3ad / IEEE 802.1AX**: Standards for Local and Metropolitan Area Networks — Link Aggregation (LACP specifications, Actor/Partner state machines, and Slow Protocols frame formats).
+* **IEEE 802.1D / IEEE 802.1w**: Media Access Control (MAC) Bridges and Rapid Spanning Tree Protocol (RSTP interaction with aggregated logical interfaces).
+* **IEEE 802.1Q**: Virtual Bridged Local Area Networks (VLAN tagging and trunk encapsulation across Port-Channels).
+* **Cisco Systems Documentation**:
+  * *Configuring Layer 2 and Layer 3 EtherChannel (Catalyst Switching Guides)*
+  * *Port Aggregation Protocol (PAgP) Proprietary Specification and Modes*
+  * *Understanding EtherChannel Load-Balancing and Frame Distribution Algorithms*
+
 
