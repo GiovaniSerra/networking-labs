@@ -5,13 +5,31 @@ This lab demonstrates the implementation, verification, and packet-level analysi
 
 ## Topology
 
-![]()
+![Topology](./images/topo.png)
 
-## Interface Mapping
+## Interface & Port-Channel Mapping
+
+| Port-Channel | Source Device | Source Interfaces | Destination Device | Destination Interfaces | Type | Protocol / Mode | Description |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Po1** | SW-ACCESS-01 | `Gi1/0`, `Gi1/1` | SW-ACCESS-02 | `Gi1/0`, `Gi1/1` | Layer 2 Trunk | LACP (`active` / `passive`) | Access Layer Peer-Link |
+| **Po2** | SW-CORE-01 | `Et0/0`, `Et0/1` | SW-ACCESS-01 | `Gi0/0`, `Gi0/1` | Layer 2 Trunk | LACP (`passive` / `active`) | Primary Uplink - Core 01 to Access 01 |
+| **Po3** | SW-CORE-01 | `Et0/2`, `Et0/3` | SW-CORE-02 | `Et0/2`, `Et0/3` | Layer 3 Routed | LACP (`active` / `active`) | Core Interconnect (`10.0.0.0/30`) |
+| **Po4** | SW-CORE-01 | `Et1/2`, `Et1/3` | SW-ACCESS-02 | `Gi0/2`, `Gi0/3` | Layer 2 Trunk | LACP (`active` / `passive`) | Redundant Cross-Link - Core 01 to Access 02 |
+| **Po5** | SW-CORE-02 | `Et1/2`, `Et1/3` | SW-ACCESS-01 | `Gi0/2`, `Gi0/3` | Layer 2 Trunk | LACP (`active` / `passive`) | Redundant Cross-Link - Core 02 to Access 01 |
+| **Po6** | SW-CORE-02 | `Et0/0`, `Et0/1` | SW-ACCESS-02 | `Gi0/0`, `Gi0/1` | Layer 2 Trunk | LACP (`active` / `passive`) | Primary Uplink - Core 02 to Access 02 |
+
+### Host Access Ports
+
+| Device | Interface | Connected Host | Mode | VLAN |
+| :---: | :---: | :---: | :---: | :---: |
+| **SW-ACCESS-01** | `Gi1/2` | VPC1 (`eth0`) | Access | VLAN 10 |
+| **SW-ACCESS-02** | `Gi1/2` | VPC2 (`eth0`) | Access | VLAN 20 |
 
 ---
 
 ## Device Configurations
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/before%20config.png)
 
 SW-ACCESS-01 (L2 Access Switch)
 ```
@@ -70,8 +88,10 @@ exit
 ## Verification & State Inspection
 
 ### 1. Dual-Stack L2 and L3 EtherChannel Validation
-
 Running show etherchannel summary on SW-CORE-01 verifies both Layer 2 and Layer 3 Port-Channels running simultaneously:
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/sw-co-01%20-%20etherc%20summ%20po1%20l2%20e%20po3%20l3.png)
+
 ```
 SW-CORE-01# show etherchannel summary
 Flags:  D - down        P - bundled in port-channel
@@ -90,9 +110,23 @@ Group  Port-channel  Protocol  Ports
 * **Po1 (SU):** S (Layer 2), U (In use) with member ports Et0/0 and Et0/1 flagged as P (bundled in port-channel).
 * **Po3 (RU):** R (Layer 3), U (In use) with member ports Et0/2 and Et0/3 bundled.
 
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/show%20summ%20%2B%20run%20int.png)
+
+
 ---
 
 ## Deep Dive: LACP Packet Dissection (Wireshark)
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/wireshark%20-%20sw-co-01%20-%201.png)
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/wireshark%20-%20sw-co-01%20-%202.png)
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/wireshark%20-%20lacp%20ac%20s.png)
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/wiresh%20-%20lb%201.png)
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/wiresh%20-%20lb%201.png)
+
 
 Frame captures highlight the structure of IEEE 802.3ad control packets:
 
@@ -110,6 +144,10 @@ Frame captures highlight the structure of IEEE 802.3ad control packets:
 
 ## EtherChannel Load-Balancing Algorithms
 The load-balancing hash distribution was tested and configured at the global configuration level:
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/load-bal%20def.png)
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/lb%20-%20src-ip.png)
 
 ```
 ! Inspect default hash configuration (Source XOR Destination IP)
@@ -130,6 +168,12 @@ EtherChannel Load-Balancing Configuration:
 
 ### Spanning Tree Protocol (STP) Integration
 The Spanning Tree Protocol treats each bundle as a single point-to-point link:
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/sh%20stp.png)
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/stp%20fin.png)
+
+
 ```
 SW-ACCESS-02# show spanning-tree
 
