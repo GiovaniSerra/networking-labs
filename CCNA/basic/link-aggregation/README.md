@@ -233,7 +233,7 @@ This section documents real failure scenarios observed during lab execution, ana
 
 ### Scenario 2: Channel-Group Removal & Interface Teardown
 
-* **Symptom:** Queda imediata do link lógico e interrupção do tráfego de Camada 2 / Camada 3.
+* **Symptom:** Immediate logical link teardown and traffic disruption across Layer 2 / Layer 3 boundaries.
 
 * **CLI Evidence:**
 ```
@@ -249,8 +249,8 @@ SW-ACCESS-02(config-if-range)# no channel-group 1 mode passive
 
 ### Scenario 3: LACP Timeout / Out of Sync (Wireshark Packet Dissection)
 
-* **Symptom: Physical member ports fail to form a bundle and indicate an un-synchronized state with Defaulted, Expired flags in frame captures.
-* **Packet Evidence (Wireshark):
+* **Symptom:** Physical member ports fail to form a bundle and indicate an un-synchronized state with Defaulted, Expired flags in frame captures.
+* **Packet Evidence (Wireshark):**
     * **Actor State Flags** (0xc5): LACP Activity: Active, Synchronization: Out of Sync (0), Collecting: Disabled (0), Distributing: Disabled (0), Defaulted: Yes (1), Expired: Yes (1).
     * **Partner State:** Null/zeroed fields (00:00:00:00:00:00), confirming no valid LACPDUs were received from the remote peer.
 * **Root Cause:** The local switch ceased receiving keepalive LACPDUs from its peer within the timeout interval, forcing the state machine to revoke frame collection and distribution permissions.
