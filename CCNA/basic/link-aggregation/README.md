@@ -208,10 +208,6 @@ EtherChannel Load-Balancing Configuration:
 
 ## Troubleshooting & Failure Analysis
 
-This section documents real failure scenarios observed during lab execution, analyzing CLI symptoms, root causes, packet-level evidence, and corrective procedures.
-
----
-
 ### Scenario 1: Protocol Mode Mismatch (LACP `active` vs. Static `on`)
 
 * **Symptom:** Member interfaces are placed into a suspended state `(s)`, the logical Port-Channel transitions to **SD** (Layer 2 Down) on the LACP side, and repetitive error logs are generated.
