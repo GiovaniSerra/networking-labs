@@ -206,6 +206,69 @@ EtherChannel Load-Balancing Configuration:
 
 ---
 
+## Troubleshooting & Failure Analysis
+
+This section documents real failure scenarios observed during lab execution, analyzing CLI symptoms, root causes, packet-level evidence, and corrective procedures.
+
+---
+
+### Scenario 1: Protocol Mode Mismatch (LACP `active` vs. Static `on`)
+
+* **Symptom:** Member interfaces are placed into a suspended state `(s)`, the logical Port-Channel transitions to **SD** (Layer 2 Down) on the LACP side, and repetitive error logs are generated.
+* **CLI Evidence:**
+  ```
+  *Aug 26 16:32:08.494: %EC-5-L3DONTBNDL2: Et0/1 suspended: LACP currently not enabled on the remote port.
+  *Aug 26 16:32:08.898: %EC-5-L3DONTBNDL2: Et0/0 suspended: LACP currently not enabled on the remote port.
+
+  SW-ACCESS-01# show etherchannel summary
+  Group  Port-channel  Protocol  Ports
+  ------+-------------+----------+-----------------------------------------------
+  1      Po1(SD)         LACP     Gi1/0(s)    Gi1/1(s)
+  ```
+
+  * **Root Cause:** Negotiation mismatch. The active mode requires bidirectional exchange of LACPDUs (IEEE 802.3ad), whereas the on mode unconditionally forces aggregation without sending or processing control frames.
+  * **Resolution:** Align negotiation parameters across both endpoints. For standard LACP, set both peers to channel-group X mode active (or active + passive).
+
+---
+
+### Scenario 2: Channel-Group Removal & Interface Teardown
+
+* **Symptom:** Queda imediata do link lógico e interrupção do tráfego de Camada 2 / Camada 3.
+
+* **CLI Evidence:**
+```
+SW-ACCESS-02(config-if-range)# no channel-group 1 mode passive
+*Aug 26 16:12:10.769: %LINK-3-UPDOWN: Interface Port-channel1, changed state to down
+*Aug 26 16:12:11.769: %LINEPROTO-5-UPDOWN: Line protocol on Interface Port-channel1, changed state to down
+```
+
+* **Root Cause:** Removing physical interfaces via no channel-group strips the logical Port-channel 1 of all active forwarders, triggering an immediate line protocol shutdown.
+* **Resolution:** Rebind the physical interfaces to the designated group and issue no shutdown across both member links and the Port-Channel interface.
+
+---
+
+### Scenario 3: LACP Timeout / Out of Sync (Wireshark Packet Dissection)
+
+* **Symptom: Physical member ports fail to form a bundle and indicate an un-synchronized state with Defaulted, Expired flags in frame captures.
+* **Packet Evidence (Wireshark):
+    * **Actor State Flags** (0xc5): LACP Activity: Active, Synchronization: Out of Sync (0), Collecting: Disabled (0), Distributing: Disabled (0), Defaulted: Yes (1), Expired: Yes (1).
+    * **Partner State:** Null/zeroed fields (00:00:00:00:00:00), confirming no valid LACPDUs were received from the remote peer.
+* **Root Cause:** The local switch ceased receiving keepalive LACPDUs from its peer within the timeout interval, forcing the state machine to revoke frame collection and distribution permissions.
+* **Resolution:** Verify Layer 1 physical continuity, verify interface operational status (no shutdown), and confirm that control protocol packets are not being dropped or blocked upstream.
+
+---
+
+### EtherChannel Pre-Configuration Checklist
+
+Before bundling physical links into a Port-Channel, verify strict parameter parity across all member interfaces:
+
+**1. Speed & Duplex:** Identical transmission speed and full-duplex operation across all member ports.
+**2. Switchport Mode:** All interfaces must share the exact same operational mode (access on the same VLAN ID, or trunk with identical allowed VLAN lists and native VLANs).
+**3. Encapsulation:** Identical trunk encapsulation protocol (switchport trunk encapsulation dot1q).
+**4. Layer 3 Consistency:** For routed EtherChannels, execute no switchport on physical member interfaces before configuring IP addressing on the logical Port-Channel.
+
+---
+
 ### Spanning Tree Protocol (STP) Integration
 The Spanning Tree Protocol treats each bundle as a single point-to-point link:
 
@@ -231,6 +294,18 @@ Po1              Root FWD 3         128.65   P2p
 ```
 * Reduced Cost: The Port-Channel receives an STP cost reflecting aggregated bandwidth (Cost = 3 for 2x Gigabit interfaces).
 * Loop Prevention: STP blocks or unblocks redundant Port-Channel logical interfaces as a single unit without shutting down individual member links.
+
+---
+
+## CLI Verification Cheat Sheet
+
+| Command | Purpose | Expected Output / Key Flags |
+| :--- | :--- | :--- |
+| `show etherchannel summary` | Quick status of all bundles and member ports | `SU` (L2 In-Use), `RU` (L3 In-Use), `P` (Bundled) |
+| `show etherchannel port-channel` | Detailed active ports, protocol, and link index | Displays member count and logical channel uptime |
+| `show lacp neighbor` | Bidirectional validation of remote LACP state | Validates Partner System ID, Priority, and Key |
+| `show etherchannel load-balance` | Verifies the active hashing algorithm | Displays active framing method (`src-dst-ip`, etc.) |
+| `show spanning-tree` | Verifies STP logical port cost and state | Displays `PoX` as single interface with aggregated cost |
 
 ---
 
