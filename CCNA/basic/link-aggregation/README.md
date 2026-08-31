@@ -156,6 +156,68 @@ Group  Port-channel  Protocol  Ports
 * **Po1 (SU):** S (Layer 2), U (In use) with member ports Et0/0 and Et0/1 flagged as P (bundled in port-channel).
 * **Po3 (RU):** R (Layer 3), U (In use) with member ports Et0/2 and Et0/3 bundled.
 
+
+---
+
+### 2. LACP Peer & Counters Validation
+
+To verify bidirectional protocol state and control plane health, use the specialized LACP inspection commands:
+
+```text
+SW-CORE-02# show lacp neighbor
+Flags:  S - Device is requesting Slow LACPDUs 
+        F - Device is requesting Fast LACPDUs
+        A - Device is in Active mode        P - Device is in Passive mode
+
+Channel group 2 neighbors
+Partner's information:
+                  LACP port                        Admin  Oper   Port    Port
+Port      Flags   Priority  Dev ID          Age    key    Key    Number  State
+Et1/2     SA      32768     5000.0001.8000   1s    0x0    0x3    0x3     0x3D
+Et1/3     SA      32768     5000.0001.8000  13s    0x0    0x3    0x4     0x3D
+
+Channel group 5 neighbors
+Partner's information:
+                  LACP port                        Admin  Oper   Port    Port
+Port      Flags   Priority  Dev ID          Age    key    Key    Number  State
+Et0/0     SP      32768     5000.0002.8000   2s    0x0    0x5    0x1     0x3C
+Et0/1     SP      32768     5000.0002.8000  20s    0x0    0x5    0x2     0x3C
+
+Channel group 6 neighbors
+Partner's information:
+                  LACP port                        Admin  Oper   Port    Port
+Port      Flags   Priority  Dev ID          Age    key    Key    Number  State
+Et0/2     SA      32768     aabb.cc80.4000  14s    0x0    0x6    0x3     0x3D
+Et0/3     SA      32768     aabb.cc80.4000  27s    0x0    0x6    0x4     0x3D
+```
+
+* **Flags:** `SA` indicates the device requests Slow LACPDUs in **Active** mode (`0x3D`), while `SP` indicates Slow LACPDUs in **Passive** mode (`0x3C`).
+* **Dev ID / Keys:** Displays the remote switch MAC identity and operational aggregation keys across all active channel groups.
+
+```text
+SW-CORE-02# show lacp sys-id
+32768, aabb.cc80.6000
+
+SW-CORE-02# show lacp counters
+             LACPDUs         Marker      Marker Response    LACPDUs
+Port       Sent   Recv     Sent   Recv     Sent   Recv      Pkts Err
+------------------------------------------------------------------
+Channel group: 2
+Et1/2       33     33        0      0        0      0          0
+Et1/3       33     33        0      0        0      0          0
+
+Channel group: 5
+Et0/0       36     14        0      0        0      0          0
+Et0/1       40     15        0      0        0      0          0
+
+Channel group: 6
+Et0/2       37     24        0      0        0      0          0
+Et0/3       37     25        0      0        0      0          0
+```
+
+* **System ID:** Confirms local priority (`32768`) and base MAC address (`aabb.cc80.6000`).
+* **LACP Counters:** Validates active transmission (`Sent`) and reception (`Recv`) of LACPDUs with zero packet errors (`LACPDUs Pkts Err: 0`).
+
 ---
 
 ## Deep Dive: LACP Packet Dissection (Wireshark)
@@ -416,49 +478,6 @@ Before bundling physical links into a Port-Channel, verify strict parameter pari
 2. **Switchport Mode:** All interfaces must share the exact same operational mode (`access` on the same VLAN ID, or `trunk` with identical allowed VLAN lists and native VLANs).
 3. **Encapsulation:** Identical trunk encapsulation protocol (`switchport trunk encapsulation dot1q`).
 4. **Layer 3 Consistency:** For routed EtherChannels, execute `no switchport` on physical member interfaces before configuring IP addressing on the logical Port-Channel.
-
----
-
-### LACP Peer & Counters Validation
-
-To verify bidirectional protocol state and control plane health, use the specialized LACP inspection commands:
-
-![LACP Neighbor Status](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/show%20lacp%20neighb.png)
-
-```
-SW-CORE-02# show lacp neighbor
-```
-
-* **Flags:** `SA` indicates the device requests Slow LACPDUs in Active mode (`0x3D`), while SP indicates Slow LACPDUs in Passive mode (`0x3C`).
-* **Dev ID / Keys:** Displays the remote switch MAC identity and operational aggregation keys across all active channel groups.
-
-
-![show lacp sys-id & show lacp counters](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/show%20lacp%20sys-id%20%2B%20counters.png)
-
-```
-SW-CORE-02# show lacp sys-id
-32768, aabb.cc80.6000
-
-SW-CORE-02# show lacp counters
-             LACPDUs         Marker      Marker Response    LACPDUs
-Port       Sent   Recv     Sent   Recv     Sent   Recv      Pkts Err
-------------------------------------------------------------------
-Channel group: 2
-Et1/2       33     33        0      0        0      0          0
-Et1/3       33     33        0      0        0      0          0
-
-Channel group: 5
-Et0/0       36     14        0      0        0      0          0
-Et0/1       40     15        0      0        0      0          0
-
-Channel group: 6
-Et0/2       37     24        0      0        0      0          0
-Et0/3       37     25        0      0        0      0          0
-```
-
-* **System ID:** Confirms local priority (`32768`) and base MAC address (`aabb.cc80.6000`).
-* **LACP Counters:** Validates active transmission (`Sent`) and reception (`Recv`) of LACPDUs with zero packet errors (`LACPDUs Pkts Err: 0`).
-
 
 ---
 
