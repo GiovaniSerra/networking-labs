@@ -417,8 +417,8 @@ Interface        Role Sts Cost      Prio.Nbr Type
 Po1              Root FWD 3         128.65   P2p
 ```
 
-* Reduced Cost: The Port-Channel receives an STP cost reflecting aggregated bandwidth (Cost = 3 for 2x Gigabit interfaces).
-* Loop Prevention: STP blocks or unblocks redundant Port-Channel logical interfaces as a single unit without shutting down individual member links.
+* **Dynamic Cost Calculation:** STP evaluates the Port-Channel as a single logical interface. The resulting path cost is platform- and cost-method-dependent (e.g., standard Short 16-bit vs. Long 32-bit path cost methods) and reflects the aggregated bandwidth of all active operational links. Link costs should always be verified via `show spanning-tree`.
+* **Loop Prevention:** STP blocks or unblocks redundant Port-Channel logical interfaces as a single unit without shutting down individual member links.
 
 ---
 
@@ -508,12 +508,12 @@ Before bundling physical links into a Port-Channel, verify strict parameter pari
 
 ## Standards & Official References
 
-* **IEEE 802.3ad / IEEE 802.1AX**: Standards for Local and Metropolitan Area Networks — Link Aggregation (LACP specifications, Actor/Partner state machines, and Slow Protocols frame formats).
-* **IEEE 802.1D / IEEE 802.1w**: Media Access Control (MAC) Bridges and Rapid Spanning Tree Protocol (RSTP interaction with aggregated logical interfaces).
-* **IEEE 802.1Q**: Virtual Bridged Local Area Networks (VLAN tagging and trunk encapsulation across Port-Channels).
-* **Cisco Systems Documentation**:
-  * *Configuring Layer 2 and Layer 3 EtherChannel (Catalyst Switching Guides)*
-  * *Port Aggregation Protocol (PAgP) Proprietary Specification and Modes*
-  * *Understanding EtherChannel Load-Balancing and Frame Distribution Algorithms*
+* [IEEE 802.3ad / IEEE 802.1AX-2020](https://standards.ieee.org/ieee/802.1AX/7055/) — IEEE Standard for Local and Metropolitan Area Networks: Link Aggregation.
+* [IEEE 802.1Q-2022](https://standards.ieee.org/ieee/802.1Q/10323/) — Bridges and Bridged Networks (VLAN Tagging and Trunking specifications).
+* [IEEE 802.1D / IEEE 802.1w (RSTP)](https://standards.ieee.org/ieee/802.1D/1325/) — Media Access Control (MAC) Bridges and Rapid Reconfiguration of Spanning Tree.
+* [Cisco Systems — Configuring Layer 2 and Layer 3 EtherChannel](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst3750/software/release/12-2_55_se/configuration/guide/scg3750/swechannel.html) — Catalyst Switch Configuration Guide.
+* [Cisco Systems — Understanding EtherChannel Load Balancing and Redundancy](https://www.cisco.com/c/en/us/support/docs/lan-switching/etherchannel/12023-4.html) — Frame distribution algorithms and hashing behavior.
+* [Cisco Systems — Understanding and Configuring the Port Aggregation Protocol (PAgP)](https://www.cisco.com/c/en/us/support/docs/lan-switching/etherchannel/22378-pagp-etherchannel.html) — Proprietary PAgP operational modes and mechanics.
+* [Cisco Systems — Spanning Tree Protocol (STP) Path Cost Evaluation and Configuration](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-3/configuration_guide/lyr2/b_173_lyr2_9300_cg/configuring_stp.html) — Short vs. Long path cost methods on aggregated interfaces.
 
 
