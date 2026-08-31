@@ -327,6 +327,7 @@ VPCS> ping 192.168.120.1
 84 bytes from 192.168.120.1 icmp_seq=3 ttl=255 time=2.523 ms
 84 bytes from 192.168.120.1 icmp_seq=4 ttl=255 time=1.876 ms
 84 bytes from 192.168.120.1 icmp_seq=5 ttl=255 time=2.559 ms
+```
 
 ---
 
@@ -412,6 +413,7 @@ Interface        Role Sts Cost      Prio.Nbr Type
 ---------------- ---- --- --------- -------- --------------------------------
 Po1              Root FWD 3         128.65   P2p
 ```
+
 * Reduced Cost: The Port-Channel receives an STP cost reflecting aggregated bandwidth (Cost = 3 for 2x Gigabit interfaces).
 * Loop Prevention: STP blocks or unblocks redundant Port-Channel logical interfaces as a single unit without shutting down individual member links.
 
