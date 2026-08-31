@@ -305,6 +305,27 @@ Po1              Root FWD 3         128.65   P2p
 
 ---
 
+## CLI Verification Cheat Sheet
+
+| Command | Purpose | Expected Output / Key Flags |
+| :--- | :--- | :--- |
+| `show etherchannel summary` | Quick status of all bundles and member ports | `SU` (L2 In-Use), `RU` (L3 In-Use), `P` (Bundled) |
+| `show etherchannel port-channel` | Detailed view of bundle members, protocol, and uptime | Displays active port count and aggregation index |
+| `show lacp neighbor` | Bidirectional validation of remote LACP state | Validates Partner System ID, Priority, and Key |
+| `show lacp sys-id` | Displays the switch local LACP system identity | Shows System Priority (default `32768`) and base MAC |
+| `show lacp counters` | Tracks transmitted and received LACP control frames | Validates continuous `LACPDUs Tx/Rx` per interface |
+| `show etherchannel load-balance` | Verifies the active frame distribution hash method | Displays configured framing method (`src-dst-ip`, etc.) |
+| `test etherchannel load-balance interface port-channel <num> ip <src> <dst>` | Simulates port selection for a given source/destination flow | Predicts which physical interface forwards the packet |
+| `show spanning-tree` | Verifies STP logical port cost and loop-free state | Displays `PoX` as a single P2p link with reduced cost |
+
+![show lacp neighbor](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/show%20lacp%20neighb.png)
+
+
+![show lacp sys-id & show lacp counters](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/show%20lacp%20sys-id%20%2B%20counters.png)
+
+
+---
+
 ## Summary of Findings
 
 * **LACP Negotiation & Stability:** Full convergence requires at least one active peer (`active` + `active` or `active` + `passive`). Mismatched static configurations (`on` vs. `active`) trigger immediate port suspension to prevent forwarding loops.
