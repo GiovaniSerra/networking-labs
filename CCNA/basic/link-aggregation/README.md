@@ -331,6 +331,35 @@ VPCS> ping 192.168.120.1
 
 ---
 
+### Spanning Tree Protocol (STP) Integration
+The Spanning Tree Protocol treats each bundle as a single point-to-point link:
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/sh%20stp.png)
+
+![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/stp%20fin.png)
+
+
+```
+SW-ACCESS-02# show spanning-tree
+
+VLAN0001
+  Spanning tree enabled protocol ieee
+  Root ID    Priority    32769
+             Address     5000.0001.0000
+             Cost        3
+             Port        65 (Port-channel1)
+             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
+
+Interface        Role Sts Cost      Prio.Nbr Type
+---------------- ---- --- --------- -------- --------------------------------
+Po1              Root FWD 3         128.65   P2p
+```
+
+* Reduced Cost: The Port-Channel receives an STP cost reflecting aggregated bandwidth (Cost = 3 for 2x Gigabit interfaces).
+* Loop Prevention: STP blocks or unblocks redundant Port-Channel logical interfaces as a single unit without shutting down individual member links.
+
+---
+
 ## Troubleshooting & Failure Analysis
 
 ### Scenario 1: Protocol Mode Mismatch (LACP `active` vs. Static `on`)
@@ -390,50 +419,6 @@ Before bundling physical links into a Port-Channel, verify strict parameter pari
 
 ---
 
-### Spanning Tree Protocol (STP) Integration
-The Spanning Tree Protocol treats each bundle as a single point-to-point link:
-
-![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/sh%20stp.png)
-
-![](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/stp%20fin.png)
-
-
-```
-SW-ACCESS-02# show spanning-tree
-
-VLAN0001
-  Spanning tree enabled protocol ieee
-  Root ID    Priority    32769
-             Address     5000.0001.0000
-             Cost        3
-             Port        65 (Port-channel1)
-             Hello Time   2 sec  Max Age 20 sec  Forward Delay 15 sec
-
-Interface        Role Sts Cost      Prio.Nbr Type
----------------- ---- --- --------- -------- --------------------------------
-Po1              Root FWD 3         128.65   P2p
-```
-
-* Reduced Cost: The Port-Channel receives an STP cost reflecting aggregated bandwidth (Cost = 3 for 2x Gigabit interfaces).
-* Loop Prevention: STP blocks or unblocks redundant Port-Channel logical interfaces as a single unit without shutting down individual member links.
-
----
-
-## CLI Verification Cheat Sheet
-
-| Command | Purpose | Expected Output / Key Flags |
-| :--- | :--- | :--- |
-| `show etherchannel summary` | Quick status of all bundles and member ports | `SU` (L2 In-Use), `RU` (L3 In-Use), `P` (Bundled) |
-| `show etherchannel port-channel` | Detailed view of bundle members, protocol, and uptime | Displays active port count and aggregation index |
-| `show lacp neighbor` | Bidirectional validation of remote LACP state | Validates Partner System ID, Priority, and Key |
-| `show lacp sys-id` | Displays the switch local LACP system identity | Shows System Priority (default `32768`) and base MAC |
-| `show lacp counters` | Tracks transmitted and received LACP control frames | Validates continuous `LACPDUs Tx/Rx` per interface |
-| `show etherchannel load-balance` | Verifies the active frame distribution hash method | Displays configured framing method (`src-dst-ip`, etc.) |
-| `test etherchannel load-balance interface port-channel <num> ip <src> <dst>` | Simulates port selection for a given source/destination flow | Predicts which physical interface forwards the packet |
-| `show spanning-tree` | Verifies STP logical port cost and loop-free state | Displays `PoX` as a single P2p link with reduced cost |
-
----
-
 ### LACP Peer & Counters Validation
 
 To verify bidirectional protocol state and control plane health, use the specialized LACP inspection commands:
@@ -452,11 +437,44 @@ SW-CORE-02# show lacp neighbor
 
 ```
 SW-CORE-02# show lacp sys-id
+32768, aabb.cc80.6000
+
 SW-CORE-02# show lacp counters
+             LACPDUs         Marker      Marker Response    LACPDUs
+Port       Sent   Recv     Sent   Recv     Sent   Recv      Pkts Err
+------------------------------------------------------------------
+Channel group: 2
+Et1/2       33     33        0      0        0      0          0
+Et1/3       33     33        0      0        0      0          0
+
+Channel group: 5
+Et0/0       36     14        0      0        0      0          0
+Et0/1       40     15        0      0        0      0          0
+
+Channel group: 6
+Et0/2       37     24        0      0        0      0          0
+Et0/3       37     25        0      0        0      0          0
 ```
 
 * **System ID:** Confirms local priority (`32768`) and base MAC address (`aabb.cc80.6000`).
 * **LACP Counters:** Validates active transmission (`Sent`) and reception (`Recv`) of LACPDUs with zero packet errors (`LACPDUs Pkts Err: 0`).
+
+
+---
+
+## CLI Verification Cheat Sheet
+
+| Command | Purpose | Expected Output / Key Flags |
+| :--- | :--- | :--- |
+| `show etherchannel summary` | Quick status of all bundles and member ports | `SU` (L2 In-Use), `RU` (L3 In-Use), `P` (Bundled) |
+| `show etherchannel port-channel` | Detailed view of bundle members, protocol, and uptime | Displays active port count and aggregation index |
+| `show lacp neighbor` | Bidirectional validation of remote LACP state | Validates Partner System ID, Priority, and Key |
+| `show lacp sys-id` | Displays the switch local LACP system identity | Shows System Priority (default `32768`) and base MAC |
+| `show lacp counters` | Tracks transmitted and received LACP control frames | Validates continuous `LACPDUs Tx/Rx` per interface |
+| `show etherchannel load-balance` | Verifies the active frame distribution hash method | Displays configured framing method (`src-dst-ip`, etc.) |
+| `test etherchannel load-balance interface port-channel <num> ip <src> <dst>` | Simulates port selection for a given source/destination flow | Predicts which physical interface forwards the packet |
+| `show spanning-tree` | Verifies STP logical port cost and loop-free state | Displays `PoX` as a single P2p link with reduced cost |
+
 
 ---
 
