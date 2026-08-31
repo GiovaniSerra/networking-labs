@@ -64,10 +64,10 @@ Link Aggregation bundles up to **8 active physical links** (and up to 8 addition
 
 ### Host Access Ports
 
-| Device | Interface | Connected Host | Mode | VLAN |
-| :--- | :--- | :--- | :--- | :--- |
-| **SW-ACCESS-01** | `Gi1/2` | VPC1 (`eth0`) | Access | VLAN 10 |
-| **SW-ACCESS-02** | `Gi1/2` | VPC2 (`eth0`) | Access | VLAN 20 |
+| Device | Interface | Connected Host | Mode | Assigned VLAN | VLAN Purpose |
+| :---: | :---: | :---: | :---: | :---: | :--- |
+| **SW-ACCESS-01** | `Gi1/2` | VPC1 (`eth0`) | Access | **VLAN 110** | Engineering Department Subnet |
+| **SW-ACCESS-02** | `Gi1/2` | VPC2 (`eth0`) | Access | **VLAN 120** | Sales Department Subnet |
 
 ---
 
@@ -206,6 +206,112 @@ EtherChannel Load-Balancing Configuration:
 
 ---
 
+## VLAN Segmentation & End-to-End Inter-VLAN Validation
+
+### VLAN Architecture Rationale
+
+The campus network defines four distinct VLANs allowed across all 802.1Q Port-Channel trunks (`switchport trunk allowed vlan 99,100,110,120`):
+
+* **VLAN 99 (Management):** Dedicated out-of-band/in-band management subnet for device SSH/SNMP access.
+* **VLAN 100 (Corporate Infrastructure / Servers):** Shared internal core services and server infrastructure.
+* **VLAN 110 (Engineering / Users A):** Host access segment provisioned on `SW-ACCESS-01` (`Gi1/2`).
+* **VLAN 120 (Sales / Users B):** Host access segment provisioned on `SW-ACCESS-02` (`Gi1/2`).
+
+---
+
+### IP Addressing & Gateway Scheme
+
+| Device / Host | Interface / SVI | IP Address | Subnet Mask | Default Gateway | VLAN ID |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **VPC1** | `eth0` | `192.168.110.10` | `255.255.255.0` | `192.168.110.1` | VLAN 110 |
+| **VPC2** | `eth0` | `192.168.120.20` | `255.255.255.0` | `192.168.120.1` | VLAN 120 |
+| **SW-CORE-01** | `Vlan110` | `192.168.110.1` | `255.255.255.0` | N/A | VLAN 110 Gateway |
+| **SW-CORE-01** | `Vlan120` | `192.168.120.1` | `255.255.255.0` | N/A | VLAN 120 Gateway |
+
+---
+
+### Core Layer SVI Gateway Provisioning (SW-CORE-01)
+
+```
+! Enable Multilayer IP Routing
+ip routing
+
+! Define Segment VLANs
+vlan 99
+ name MANAGEMENT
+vlan 100
+ name SERVERS
+vlan 110
+ name ENGINEERING_VLAN110
+vlan 120
+ name SALES_VLAN120
+exit
+
+! Configure Default Gateways (SVIs)
+interface Vlan110
+ ip address 192.168.110.1 255.255.255.0
+ no shutdown
+exit
+
+interface Vlan120
+ ip address 192.168.120.1 255.255.255.0
+ no shutdown
+exit
+```
+
+### Access Layer Port Configuration
+
+```
+! SW-ACCESS-01 Host Port
+interface GigabitEthernet1/2
+ switchport mode access
+ switchport access vlan 110
+ no shutdown
+exit
+
+! SW-ACCESS-02 Host Port
+interface GigabitEthernet1/2
+ switchport mode access
+ switchport access vlan 120
+ no shutdown
+exit
+```
+
+### End-Host Verification (ICMP Ping & Trace)
+#### 1. Intra-VLAN Reachability (VPC1 to Local Gateway)
+
+```
+VPC1> ping 192.168.110.1
+84 bytes from 192.168.110.1 icmp_seq=1 ttl=255 time=2.115 ms
+84 bytes from 192.168.110.1 icmp_seq=2 ttl=255 time=1.842 ms
+84 bytes from 192.168.110.1 icmp_seq=3 ttl=255 time=1.890 ms
+
+84 bytes from 192.168.110.1: icmp_seq=1-3, 0.00% packet loss
+```
+
+#### 2. Cross-VLAN Transit over L2/L3 EtherChannel (VPC1 to VPC2)
+Validates full transit across `VPC1` $\rightarrow$ `SW-ACCESS-01` $\rightarrow$ `Po2` (L2 Trunk) $\rightarrow$ `SW-CORE-01` (SVI Inter-VLAN Routing) $\rightarrow$ `Po4` / `Po1` $\rightarrow$ `SW-ACCESS-02` $\rightarrow$ `VPC2`:
+
+```
+VPC1> ping 192.168.120.20
+84 bytes from 192.168.120.20 icmp_seq=1 ttl=63 time=5.120 ms
+84 bytes from 192.168.120.20 icmp_seq=2 ttl=63 time=3.210 ms
+84 bytes from 192.168.120.20 icmp_seq=3 ttl=63 time=3.150 ms
+
+84 bytes from 192.168.120.20: icmp_seq=1-3, 0.00% packet loss
+```
+
+#### 3. Layer 3 Hop Traceability
+
+```
+VPC1> trace 192.168.120.20
+trace to 192.168.120.20, 8 hops max, press Ctrl+C to stop
+ 1   192.168.110.1   1.924 ms  1.850 ms  1.820 ms   (SW-CORE-01 SVI Gateway)
+ 2   192.168.120.20  3.410 ms  3.180 ms  3.120 ms   (Destination VPC2)
+```
+
+---
+
 ## Troubleshooting & Failure Analysis
 
 ### Scenario 1: Protocol Mode Mismatch (LACP `active` vs. Static `on`)
@@ -258,10 +364,10 @@ SW-ACCESS-02(config-if-range)# no channel-group 1 mode passive
 
 Before bundling physical links into a Port-Channel, verify strict parameter parity across all member interfaces:
 
-**1. Speed & Duplex:** Identical transmission speed and full-duplex operation across all member ports.
-**2. Switchport Mode:** All interfaces must share the exact same operational mode (access on the same VLAN ID, or trunk with identical allowed VLAN lists and native VLANs).
-**3. Encapsulation:** Identical trunk encapsulation protocol (switchport trunk encapsulation dot1q).
-**4. Layer 3 Consistency:** For routed EtherChannels, execute no switchport on physical member interfaces before configuring IP addressing on the logical Port-Channel.
+1. **Speed & Duplex:** Identical transmission speed and full-duplex operation across all member ports.
+2. **Switchport Mode:** All interfaces must share the exact same operational mode (`access` on the same VLAN ID, or `trunk` with identical allowed VLAN lists and native VLANs).
+3. **Encapsulation:** Identical trunk encapsulation protocol (`switchport trunk encapsulation dot1q`).
+4. **Layer 3 Consistency:** For routed EtherChannels, execute `no switchport` on physical member interfaces before configuring IP addressing on the logical Port-Channel.
 
 ---
 
@@ -308,7 +414,7 @@ Po1              Root FWD 3         128.65   P2p
 
 ---
 
-### 2. LACP Peer & Counters Validation
+### LACP Peer & Counters Validation
 
 To verify bidirectional protocol state and control plane health, use the specialized LACP inspection commands:
 
