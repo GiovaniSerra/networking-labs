@@ -298,18 +298,6 @@ Po1              Root FWD 3         128.65   P2p
 | Command | Purpose | Expected Output / Key Flags |
 | :--- | :--- | :--- |
 | `show etherchannel summary` | Quick status of all bundles and member ports | `SU` (L2 In-Use), `RU` (L3 In-Use), `P` (Bundled) |
-| `show etherchannel port-channel` | Detailed active ports, protocol, and link index | Displays member count and logical channel uptime |
-| `show lacp neighbor` | Bidirectional validation of remote LACP state | Validates Partner System ID, Priority, and Key |
-| `show etherchannel load-balance` | Verifies the active hashing algorithm | Displays active framing method (`src-dst-ip`, etc.) |
-| `show spanning-tree` | Verifies STP logical port cost and state | Displays `PoX` as single interface with aggregated cost |
-
----
-
-## CLI Verification Cheat Sheet
-
-| Command | Purpose | Expected Output / Key Flags |
-| :--- | :--- | :--- |
-| `show etherchannel summary` | Quick status of all bundles and member ports | `SU` (L2 In-Use), `RU` (L3 In-Use), `P` (Bundled) |
 | `show etherchannel port-channel` | Detailed view of bundle members, protocol, and uptime | Displays active port count and aggregation index |
 | `show lacp neighbor` | Bidirectional validation of remote LACP state | Validates Partner System ID, Priority, and Key |
 | `show lacp sys-id` | Displays the switch local LACP system identity | Shows System Priority (default `32768`) and base MAC |
@@ -318,11 +306,31 @@ Po1              Root FWD 3         128.65   P2p
 | `test etherchannel load-balance interface port-channel <num> ip <src> <dst>` | Simulates port selection for a given source/destination flow | Predicts which physical interface forwards the packet |
 | `show spanning-tree` | Verifies STP logical port cost and loop-free state | Displays `PoX` as a single P2p link with reduced cost |
 
-![show lacp neighbor](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/show%20lacp%20neighb.png)
+---
+
+### 2. LACP Peer & Counters Validation
+
+To verify bidirectional protocol state and control plane health, use the specialized LACP inspection commands:
+
+![LACP Neighbor Status](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/show%20lacp%20neighb.png)
+
+```
+SW-CORE-02# show lacp neighbor
+```
+
+* **Flags:** `SA` indicates the device requests Slow LACPDUs in Active mode (`0x3D`), while SP indicates Slow LACPDUs in Passive mode (`0x3C`).
+* **Dev ID / Keys:** Displays the remote switch MAC identity and operational aggregation keys across all active channel groups.
 
 
 ![show lacp sys-id & show lacp counters](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/show%20lacp%20sys-id%20%2B%20counters.png)
 
+```
+SW-CORE-02# show lacp sys-id
+SW-CORE-02# show lacp counters
+```
+
+* **System ID:** Confirms local priority (`32768`) and base MAC address (`aabb.cc80.6000`).
+* **LACP Counters:** Validates active transmission (`Sent`) and reception (`Recv`) of LACPDUs with zero packet errors (`LACPDUs Pkts Err: 0`).
 
 ---
 
