@@ -310,6 +310,24 @@ trace to 192.168.120.20, 8 hops max, press Ctrl+C to stop
  2   192.168.120.20  3.410 ms  3.180 ms  3.120 ms   (Destination VPC2)
 ```
 
+### End-Host Verification (ICMP Ping Tests)
+
+![VPC Inter-VLAN Connectivity Tests](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/basic/link-aggregation/images/test%20ping%20vpc1%20-%20vpc2.png)
+
+#### 1. Remote Gateway Reachability (VPC1 to VLAN 120 Gateway)
+```text
+VPCS> show ip
+NAME        : VPCS[1]
+IP/MASK     : 192.168.110.10/24
+GATEWAY     : 192.168.110.1
+
+VPCS> ping 192.168.120.1
+84 bytes from 192.168.120.1 icmp_seq=1 ttl=255 time=1.461 ms
+84 bytes from 192.168.120.1 icmp_seq=2 ttl=255 time=2.019 ms
+84 bytes from 192.168.120.1 icmp_seq=3 ttl=255 time=2.523 ms
+84 bytes from 192.168.120.1 icmp_seq=4 ttl=255 time=1.876 ms
+84 bytes from 192.168.120.1 icmp_seq=5 ttl=255 time=2.559 ms
+
 ---
 
 ## Troubleshooting & Failure Analysis
