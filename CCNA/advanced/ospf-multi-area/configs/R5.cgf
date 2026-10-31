@@ -1,0 +1,16 @@
+en
+ conf t
+  hostname R5
+
+interface Loopback0
+ ip address 50.0.0.1 255.255.255.0
+ ip ospf network point-to-point
+ ip ospf 50 area 0
+!
+interface FastEthernet0/0
+ description REDE AZUL
+ ip address 10.145.0.5 255.255.255.0
+ ip ospf 50 area 0
+ duplex full
+ no shut
+end
