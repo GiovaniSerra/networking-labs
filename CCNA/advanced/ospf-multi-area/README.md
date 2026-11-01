@@ -453,8 +453,6 @@ When authentication is initially applied to R5 but not yet on R1 and R4, the OSP
 
 As shown in the `debug ip ospf adj` logs above, the router actively reports mismatched authentication types: `Mismatched Authentication type. Input packet specified type 0, we use type 2`.
 
-`Mismatched Authentication type. Input packet specified type 0, we use type 2.`
-
 Once the keys are synchronized across all Area 0 routers, the adjacencies re-establish and OSPF begins transmitting with the new cryptographic keys:
 
 ![OSPF Adjacency Restoration and Key Usage](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/advanced/ospf-multi-area/images/OPSF-50%20ADJ.PNG)
