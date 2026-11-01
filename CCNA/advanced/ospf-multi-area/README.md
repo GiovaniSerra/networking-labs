@@ -76,32 +76,32 @@ Multi-Area OSPF introduces a two-tier hierarchical design that segments a large 
  
 ---
 
-## Tabela de Endereçamento (Addressing Table)
+## Addressing Table
 
-| Dispositivo | Interface | Endereço IP | Máscara de Sub-rede | Área OSPF | Descrição |
+| Device | Interface | IP Address | Subnet Mask | OSPF Area | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **R1** | Fa0/0 | 10.145.0.1 | 255.255.255.0 (/24) | Área 0 | Segmento Multi-Acesso Backbone (REDE AZUL) |
-| | Fa1/0 | 10.13.0.1 | 255.255.255.252 (/30) | Área 30 | Enlace de Trânsito para R3 (REDE VERDE) |
-| | Fa2/0 | 10.12.0.1 | 255.255.255.252 (/30) | Área 20 | Enlace de Trânsito para R2 (REDE VERMELHA) |
-| | Loopback0 | 10.0.0.1 | 255.255.255.0 (/24) | Área 0 | Identificação do Router / Prefixo de Gestão |
-| **R2** | Fa2/0 | 10.12.0.2 | 255.255.255.252 (/30) | Área 20 | Enlace de Trânsito para R1 (REDE VERMELHA) |
-| | Fa1/0 | 10.26.0.1 | 255.255.255.252 (/30) | Área 60 | Enlace de Trânsito para R6 (REDE AMARELA) |
-| | Loopback0 | 20.0.0.1 | 255.255.255.0 (/24) | Área 20 | Identificação do Router / Prefixo Local |
-| **R3** | FA1/0 | 10.13.0.2 | 255.255.255.252 (/30) | Área 30 | Enlace de Trânsito para R1 (REDE VERDE) |
-| | Loopback0 | 30.0.0.1 | 255.255.255.0 (/24) | Área 30 | Rede de Utilizadores / Prefixo Simulado 0 |
-| | Loopback1 | 30.0.1.1 | 255.255.255.0 (/24) | Área 30 | Rede de Utilizadores / Prefixo Simulado 1 |
-| | Loopback2 | 30.0.2.1 | 255.255.255.0 (/24) | Área 30 | Rede de Utilizadores / Prefixo Simulado 2 |
-| | Loopback3 | 30.0.3.1 | 255.255.255.0 (/24) | Área 30 | Rede de Utilizadores / Prefixo Simulado 3 |
-| | Loopback4 | 30.0.4.1 | 255.255.255.0 (/24) | Área 30 | Rede de Utilizadores / Prefixo Simulado 4 |
-| | Loopback5 | 30.0.5.1 | 255.255.255.0 (/24) | Área 30 | Rede de Utilizadores / Prefixo Simulado 5 |
-| | Loopback6 | 30.0.6.1 | 255.255.255.0 (/24) | Área 30 | Rede de Utilizadores / Prefixo Simulado 6 |
-| | Loopback7 | 30.0.7.1 | 255.255.255.0 (/24) | Área 30 | Rede de Utilizadores / Prefixo Simulado 7 |
-| **R4** | FastEthernet0/0 | 10.145.0.4 | 255.255.255.0 (/24) | Área 0 | Segmento Multi-Acesso Backbone (REDE AZUL) |
-| | Loopback0 | 40.0.0.1 | 255.255.255.0 (/24) | Área 0 | Identificação do Router / Prefixo Local |
-| **R5** | FastEthernet0/0 | 10.145.0.5 | 255.255.255.0 (/24) | Área 0 | Segmento Multi-Acesso Backbone (REDE AZUL) |
-| | Loopback0 | 50.0.0.1 | 255.255.255.0 (/24) | Área 0 | Identificação do Router / Prefixo Local |
-| **R6** | FA1/0 | 10.26.0.2 | 255.255.255.252 (/30) | Área 60 | Enlace de Trânsito para R2 (REDE AMARELA) |
-| | Loopback0 | 60.0.0.1 | 255.255.255.0 (/24) | Área 60 | Identificação do Router / Prefixo Local |
+| **R1** | Fa0/0 | 10.145.0.1 | 255.255.255.0 (/24) | Area 0 | Backbone Multi-Access Segment (BLUE NETWORK) |
+| | Fa1/0 | 10.13.0.1 | 255.255.255.252 (/30) | Area 30 | Transit Link to R3 (GREEN NETWORK) |
+| | Fa2/0 | 10.12.0.1 | 255.255.255.252 (/30) | Area 20 | Transit Link to R2 (RED NETWORK) |
+| | Loopback0 | 10.0.0.1 | 255.255.255.0 (/24) | Area 0 | Router ID / Management Prefix |
+| **R2** | Fa2/0 | 10.12.0.2 | 255.255.255.252 (/30) | Area 20 | Transit Link to R1 (RED NETWORK) |
+| | Fa1/0 | 10.26.0.1 | 255.255.255.252 (/30) | Area 60 | Transit Link to R6 (YELLOW NETWORK) |
+| | Loopback0 | 20.0.0.1 | 255.255.255.0 (/24) | Area 20 | Router ID / Local Prefix |
+| **R3** | FA1/0 | 10.13.0.2 | 255.255.255.252 (/30) | Area 30 | Transit Link to R1 (GREEN NETWORK) |
+| | Loopback0 | 30.0.0.1 | 255.255.255.0 (/24) | Area 30 | User Network / Simulated Prefix 0 |
+| | Loopback1 | 30.0.1.1 | 255.255.255.0 (/24) | Area 30 | User Network / Simulated Prefix 1 |
+| | Loopback2 | 30.0.2.1 | 255.255.255.0 (/24) | Area 30 | User Network / Simulated Prefix 2 |
+| | Loopback3 | 30.0.3.1 | 255.255.255.0 (/24) | Area 30 | User Network / Simulated Prefix 3 |
+| | Loopback4 | 30.0.4.1 | 255.255.255.0 (/24) | Area 30 | User Network / Simulated Prefix 4 |
+| | Loopback5 | 30.0.5.1 | 255.255.255.0 (/24) | Area 30 | User Network / Simulated Prefix 5 |
+| | Loopback6 | 30.0.6.1 | 255.255.255.0 (/24) | Area 30 | User Network / Simulated Prefix 6 |
+| | Loopback7 | 30.0.7.1 | 255.255.255.0 (/24) | Area 30 | User Network / Simulated Prefix 7 |
+| **R4** | FastEthernet0/0 | 10.145.0.4 | 255.255.255.0 (/24) | Area 0 | Backbone Multi-Access Segment (BLUE NETWORK) |
+| | Loopback0 | 40.0.0.1 | 255.255.255.0 (/24) | Area 0 | Router ID / Local Prefix |
+| **R5** | FastEthernet0/0 | 10.145.0.5 | 255.255.255.0 (/24) | Area 0 | Backbone Multi-Access Segment (BLUE NETWORK) |
+| | Loopback0 | 50.0.0.1 | 255.255.255.0 (/24) | Area 0 | Router ID / Local Prefix |
+| **R6** | FA1/0 | 10.26.0.2 | 255.255.255.252 (/30) | Area 60 | Transit Link to R2 (YELLOW NETWORK) |
+| | Loopback0 | 60.0.0.1 | 255.255.255.0 (/24) | Area 60 | Router ID / Local Prefix |
 
 ---
 
@@ -346,15 +346,20 @@ O IA    60.0.0.0 [110/4] via 10.145.0.1, 00:05:12, FastEthernet0/0
 ---
 
 ## Phase 5: Troubleshooting (TSHOOT) & Case Studies
+
 In real-world enterprise environments, OSPF misconfigurations can lead to routing blackholes, suboptimal paths, or adjacency failures. This section details common issues simulated in this topology, the diagnostic methodology, and the commands used to isolate the root cause.
 
 ### Scenario 1: OSPF Network Type Mismatch
-Symptom: R1 and R3 establish a FULL neighbor adjacency, but OSPF routes from R3 do not appear in R1's routing table (and vice-versa).Root Cause: The interface Fa1/0 on R1 was manually configured as point-to-point, while R3 remained at the default BROADCAST network type. OSPF successfully forms an adjacency because the Hello/Dead timers match (10/40 seconds by default for both types on FastEthernet). However, the SPF algorithm fails to compute the routes because the link-state database contains conflicting link types for the same segment.Diagnostic Steps:
 
-* show ip ospf neighbor reveals an abnormal state where one router sees FULL/ - (expecting point-to-point) and the other sees FULL/DR (expecting a broadcast election).
+**Symptom:** R1 and R3 establish a `FULL` neighbor adjacency, but OSPF routes from R3 do not appear in R1's routing table (and vice-versa).
 
-* show ip ospf interface FastEthernet1/0 explicitly reveals the conflicting Network Type on each end.
-* Resolution: Ensure both ends of the /30 transit link share the exact same network type:
+**Root Cause:** The interface `Fa1/0` on R1 was manually configured as `point-to-point`, while R3 remained at the default `BROADCAST` network type. OSPF successfully forms an adjacency because the Hello/Dead timers match (10/40 seconds by default for both types on FastEthernet). However, the SPF algorithm fails to compute the routes because the link-state database contains conflicting link types for the same segment.
+
+**Diagnostic Steps:**
+- `show ip ospf neighbor` reveals an abnormal state where one router sees `FULL/ -` (expecting point-to-point) and the other sees `FULL/DR` (expecting a broadcast election).
+- `show ip ospf interface FastEthernet1/0` explicitly reveals the conflicting Network Type on each end.
+
+**Resolution:** Ensure both ends of the `/30` transit link share the exact same network type:
 
 ```Plaintext
 R3(config)# interface FastEthernet1/0
@@ -364,32 +369,57 @@ R3(config-if)# ip ospf network point-to-point
 ---
 
 ### Scenario 2: Virtual Link Stuck in DOWN State
-Symptom: Area 60 routes unexpectedly disappear from the Area 0 backbone. 
-The virtual link is inactive.
-Root Cause: OSPF virtual links rely strictly on the remote neighbor's Router ID (RID), not its physical interface IP address. 
-If R1 reboots and its RID changes (e.g., if a new Loopback with a higher IP was added without a hardcoded router-id command), R2's virtual link configuration points to a non-existent RID, causing the tunnel to fail.
-Diagnostic Steps:
+*Symptom:* Area 60 routes unexpectedly disappear from the Area 0 backbone. The virtual link is inactive.
 
-* show ip ospf virtual-links confirms the state is DOWN.
-* show ip ospf on R1 verifies the currently active Router ID.Resolution: Always hardcode the Router ID on Area Border Routers (ABRs) to ensure deterministic behavior, and update the virtual link target.
+*Root Cause:* OSPF virtual links rely strictly on the remote neighbor's Router ID (RID), not its physical interface IP address. If R1 reboots and its RID changes (e.g., if a new Loopback with a higher IP was added without a hardcoded router-id command), R2's virtual link configuration points to a non-existent RID, causing the tunnel to fail.
+
+*Diagnostic Steps:*
+
+* `show ip ospf virtual-links` confirms the state is DOWN.
+* `show ip ospf` on R1 verifies the currently active Router ID.
+
+*Resolution:* Always hardcode the Router ID on Area Border Routers (ABRs) to ensure deterministic behavior, and update the virtual link target:
 
 ```Plaintext
 R1(config)# router ospf 10
 R1(config-router)# router-id 10.0.0.1
+
 R2(config)# router ospf 20
 R2(config-router)# area 20 virtual-link 10.0.0.1
 ```
 
 ---
 
-### Scenario 3: Adjacency Failure (Stub Flag Mismatch)
-Symptom: Neighbors transition to the DOWN state. The routers refuse to process incoming Hello packets, and no LSAs are exchanged.Root Cause: Area 30 was configured as a stub area on R3 (area 30 stub), but the configuration was missing on ABR R1. For an OSPF adjacency to form, the Options field (specifically the E-bit, which indicates external routing capability) in the Hello packets must match perfectly.
-Diagnostic Steps:
+###Scenario 3: Adjacency Failure (Stub Flag Mismatch)
+*Symptom:* Neighbors transition to the DOWN state. The routers refuse to process incoming Hello packets, and no LSAs are exchanged.
 
-* debug ip ospf hello provides real-time control plane logs, immediately flagging the error: OSPF: Rcv hello from 30.0.7.1 area 30 from FastEthernet1/0 mismatched Stub/Transit area option bit.Resolution: Apply the stub configuration consistently across all routers attached to that specific area.
+*Root Cause:* Area 30 was configured as a stub area on R3 (area 30 stub), but the configuration was missing on ABR R1. For an OSPF adjacency to form, the Options field (specifically the E-bit, which indicates external routing capability) in the Hello packets must match perfectly.
+
+*Diagnostic Steps:*
+
+* `debug ip ospf hello` provides real-time control plane logs, immediately flagging the error:
+* `OSPF: Rcv hello from 30.0.7.1 area 30 from FastEthernet1/0 mismatched Stub/Transit area option bit.`
+
+*Resolution:* Apply the stub configuration consistently across all routers attached to that specific area:
 
 ```Plaintext
 R1(config)# router ospf 10
 R1(config-router)# area 30 stub no-summary
 ```
+
+---
+
+## Acknowledgments & References
+
+This enterprise OSPF architecture, laboratory design, and core documentation structure were adapted and inspired by the technical educational content created by **Gustavo Kalau**.
+- **Video Reference:** [CCNA R&S - Curso completo - AULA 18 - LAB OSPF PARTE 01 - AREAS](https://www.youtube.com/watch?v=497neyJPboA&list=PL6BTdBqzl1oYk2XeuD3tqi1SOpLmL3e3L&index=18)
+
+**Official Cisco Documentation:**
+- [Cisco OSPF Design Guide](https://www.cisco.com/c/en/us/support/docs/ip/open-shortest-path-first-ospf/7039-1.html): Best practices for OSPF network hierarchical design, area segmentation, and LSDB optimization.
+- [Cisco IOS IP Routing: OSPF Command Reference](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/iproute_ospf/command/iro-cr-book.html): Syntax and operational parameters for advanced commands utilized in this lab, including `stub no-summary`, `area range`, and `virtual-link`.
+
+**IETF Standards (RFCs):**
+- **RFC 2328 (OSPF Version 2):** The core standard defining the Shortest Path First (SPF) algorithm, link-state database synchronization, and Designated Router (DR) elections.
+- **RFC 3509 (Alternative Implementations of OSPF ABRs):** Defines the strict rules and behavioral expectations for Area Border Routers managing inter-area routing and Virtual Link transit paths.
+
 
