@@ -270,7 +270,7 @@ R5# clear ip ospf process
 #### Verification
 After clearing the OSPF processes and allowing the network to converge, the `show ip ospf neighbor` command on R5 confirms the new hierarchy: R4 is elected as the BDR, R1 becomes a DROTHER, and R5 (the local router) successfully assumes the DR role.
 
-![R5 OSPF Neighbor Table (DR/BDR Verification)](./ospf-multi-area/images/r5%20-%20show%20ip%20ospf%20neighbor.PNG)
+![R5 OSPF Neighbor Table (DR/BDR Verification)](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/advanced/ospf-multi-area/images/r5%20-%20show%20ip%20ospf%20neighbor.PNG)
 
 
 ---
@@ -331,7 +331,7 @@ Once configured, OSPF establishes a logical point-to-point unnumbered connection
 #### 1. Verifying Virtual Link Status
 Executing the `show ip ospf virtual-links` command on R1 verifies that the adjacency across transit Area 20 to the remote RID 20.0.0.1 is `UP` and functioning as a demand circuit.
 
-![R1 Virtual Link Status Verification](./ospf-multi-area/images/r1%20-%20show%20ip%20ospf%20virtual-links.PNG)
+![R1 Virtual Link Status Verification](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/advanced/ospf-multi-area/images/r1%20-%20show%20ip%20ospf%20virtual-links.PNG)
 
 
 ### 2. End-to-End Reachability (R5 Routing Table)
