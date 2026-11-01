@@ -390,7 +390,7 @@ R2(config-router)# area 20 virtual-link 10.0.0.1
 
 ---
 
-###Scenario 3: Adjacency Failure (Stub Flag Mismatch)
+### Scenario 3: Adjacency Failure (Stub Flag Mismatch)
 *Symptom:* Neighbors transition to the DOWN state. The routers refuse to process incoming Hello packets, and no LSAs are exchanged.
 
 *Root Cause:* Area 30 was configured as a stub area on R3 (area 30 stub), but the configuration was missing on ABR R1. For an OSPF adjacency to form, the Options field (specifically the E-bit, which indicates external routing capability) in the Hello packets must match perfectly.
@@ -406,6 +406,65 @@ R2(config-router)# area 20 virtual-link 10.0.0.1
 R1(config)# router ospf 10
 R1(config-router)# area 30 stub no-summary
 ```
+
+---
+
+## Phase 6: Control Plane Analysis (Wireshark)
+
+To validate the OSPF control plane mechanics beyond the Cisco IOS command-line interface, packet captures were analyzed using Wireshark on the Area 0 broadcast segment.
+
+### OSPF Hello Packet Deep-Dive
+The following capture inspects an OSPF Hello packet originating from R5 (`10.145.0.5`) destined to the `224.0.0.5` All-OSPF-Routers multicast address.
+
+![OSPF Hello Packet Capture in Wireshark](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/advanced/ospf-multi-area/images/wireshark%20-%20hello%20packet.PNG)
+
+**Key Control Plane Observations:**
+- **Router ID & Area:** The packet correctly identifies the source Router ID as `50.0.0.1` operating within Area `0.0.0.0` (Backbone).
+- **DR/BDR Validation:** The `Designated Router` is listed as `10.145.0.5` (R5) and the `Backup Designated Router` as `10.145.0.4` (R4). This independently confirms the deterministic election forced via interface priorities in Phase 3.
+- **E-Bit (External Routing Capability):** Within the `Options` field, the `(E) External Routing` flag is explicitly set to `Capable` (`..1.`). This is the exact parameter that causes the "Stub Flag Mismatch" adjacency failure detailed in the Troubleshooting section (Phase 5) when one router expects a standard area (E=1) and the other expects a stub area (E=0).
+- **Active Neighbors:** The packet payload acknowledges active bi-directional communication with neighbors `10.0.0.1` (R1) and `40.0.0.1` (R4).
+
+
+---
+
+## Phase 7: OSPF Security & Control Plane Authentication
+
+### Securing the Backbone Routing Domain
+In enterprise networks, leaving routing protocols unauthenticated exposes the infrastructure to route spoofing, traffic misdirection, and Denial of Service (DoS) attacks. To align this routing architecture with cybersecurity best practices, cryptographic authentication is implemented across the Area 0 backbone.
+
+This ensures that R1, R4, and R5 will only accept OSPF Link-State Advertisements (LSAs) from trusted peers possessing the correct pre-shared cryptographic key, effectively securing the control plane.
+
+### Implementation: MD5 Cryptographic Authentication
+OSPFv2 supports Null (Type 0), Plaintext (Type 1), and Cryptographic (Type 2) authentication. We implement Type 2 (MD5) on the multi-access backbone segment (`10.145.0.0/24`).
+
+**Configuration applied to R5 (Area 0 Interface):**
+
+```text
+R5(config)# interface FastEthernet0/0
+R5(config-if)# ip ospf authentication message-digest
+R5(config-if)# ip ospf message-digest-key 1 md5 CCNA_SECURE_123
+```
+(Note: This identical configuration must be deployed on R1's Fa0/0 and R4's Fa0/0 to allow adjacency formation).
+
+### Verification & Adjacency Restoration
+When authentication is initially applied to R5 but not yet on R1 and R4, the OSPF Dead timers expire, and the adjacency drops. 
+
+![OSPF Authentication Mismatch Debug](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/advanced/ospf-multi-area/images/ospf%20auth%20m.PNG)
+
+As shown in the `debug ip ospf adj` logs above, the router actively reports mismatched authentication types: `Mismatched Authentication type. Input packet specified type 0, we use type 2`.
+
+`Mismatched Authentication type. Input packet specified type 0, we use type 2.`
+
+Once the keys are synchronized across all Area 0 routers, the adjacencies re-establish and OSPF begins transmitting with the new cryptographic keys:
+
+![OSPF Adjacency Restoration and Key Usage](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/advanced/ospf-multi-area/images/OPSF-50%20ADJ.PNG)
+
+
+The security posture can be verified using the interface detail command:
+
+![R5 OSPF Interface Authentication Verification](https://github.com/GiovaniSerra/networking-labs/blob/main/CCNA/advanced/ospf-multi-area/images/r5%20-%20show%20ip%20ospf%20interface%20fa00.PNG)
+
+The output confirms that `Message digest authentication enabled` and the `Youngest key id is 1` are actively securing the control plane on the interface.
 
 ---
 
